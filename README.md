@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.1, core only, not released.** The core and the connection test work on an SAP ABAP Platform 2023 trial, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)). The e-mail module comes next.
+> **Status: v0.2, not released.** The core, the connection test and the e-mail module work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -72,6 +72,8 @@ The destination names can be different; the programs let you enter them.
 2. **SE38** → program `ZCHE_GRAPH_CHECK` → **Create** → type **Executable program**. Paste [`src/zche_graph_check.prog.abap`](src/zche_graph_check.prog.abap) and activate (**Ctrl+F3**). When asked, activate the include too.
 3. Optional: run the unit tests of `ZCHE_GRAPH_CHECK` (**Program → Execute → Unit Tests**, or **Ctrl+Shift+F10** in ADT). 16 tests should pass. They do not call Microsoft.
 
+When you activate `ZCHE_GRAPH_CORE` later, after a second program already uses it, SAP asks in which main program to check it. Choose any of them.
+
 **If activation says a line is too long:** in SE38 go to **Utilities → Settings → ABAP Editor → Editor** and clear **Downwards-compatible line length (72)**. Then paste again.
 
 **Alternative: abapGit.** You can pull this repository into a package instead.
@@ -124,12 +126,120 @@ ENDTRY.
 | `LCL_GRAPH_CONV` | UTF-8, Base64 (for attachments), URL encoding |
 | `LCX_GRAPH` | HTTP status, Microsoft error code, `request-id`, hint |
 
+## E-mail module
+
+Send and read mail as one mailbox, for example `sap@contoso.com`. The module consists of the include `ZCHE_GRAPH_MAIL_LIB` (class `LCL_GRAPH_MAIL`) and the program `ZCHE_GRAPH_MAIL`, which sends a test mail or lists a folder.
+
+**Sending:**
+- text or HTML, To/Cc/Bcc, reply-to, importance;
+- attachments of any kind, including a spool request as PDF (ABAP list, SAPscript or Smart Forms);
+- inline pictures for HTML (`<img src="cid:logo">`);
+- mails up to about 2.9 MB of attachments in one call. Larger mails are created as a draft, get their attachments one by one (single attachments over 2.9 MB in pieces of 3.2 MB, up to 150 MB) and are then sent.
+
+**Reading:**
+- the messages of a folder (only unread if wanted), with sender, subject and preview;
+- the body (text or HTML) and the attachments, each as bytes;
+- mark as read, and move to another folder (by well-known name such as `archive`, or by display name).
+
+### What the e-mail module needs in addition
+
+| What | Why | Who |
+|---|---|---|
+| Application permissions **`Mail.Send`** (sending) and **`Mail.ReadWrite`** (large mails, reading, marking, moving), with admin consent | Without them Microsoft answers HTTP 403 | Microsoft 365 / Entra administrator |
+| **Restriction to the SAP mailbox(es)** | Without it the application may send as and read **any** mailbox of the company | Exchange Online administrator |
+| A mailbox for SAP, for example `sap@contoso.com` | The sender | Microsoft 365 administrator |
+| For attachments over 2.9 MB: SAP may reach `outlook.office.com` with HTTPS (SICF proxy settings, STRUST) | Microsoft hands out an upload URL on that host; no SM59 destination is used for it | Basis |
+
+**Restricting the mailboxes.** Exchange Online offers two ways. Check Microsoft's current documentation for which to use; Microsoft now recommends the first.
+
+1. **RBAC for Applications:** a management scope with the SAP mailboxes, and the application roles `Application Mail.Send` / `Application Mail.ReadWrite` on that scope only. When you use this, do **not** also grant the tenant-wide `Mail.*` permissions in Entra ID.
+2. **Application access policy (older):** keep the permissions in Entra ID and limit them with PowerShell (Exchange Online module):
+   ```powershell
+   New-DistributionGroup -Name "SAP Graph mailboxes" -Type Security -Members sap@contoso.com
+   New-ApplicationAccessPolicy -AppId <application (client) ID> -PolicyScopeGroupId "SAP Graph mailboxes" -AccessRight RestrictAccess -Description "abap-graph"
+   Test-ApplicationAccessPolicy -Identity sap@contoso.com -AppId <application (client) ID>
+   ```
+
+Neither way has been tried with this project yet.
+
+### Install
+
+After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_MAIL_LIB` (type **Include program**) → paste [`src/zche_graph_mail_lib.prog.abap`](src/zche_graph_mail_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_MAIL` (type **Executable program**) → paste [`src/zche_graph_mail.prog.abap`](src/zche_graph_mail.prog.abap) → activate together with the include.
+
+### Try it
+
+Run `ZCHE_GRAPH_MAIL`:
+
+- **Send a mail:**
+  - tenant and mailbox (the sender);
+  - To (several addresses separated by `;`, also as `Name <address>`), subject and text;
+  - optional: a spool request number (from SP01), which is attached as PDF.
+
+  As a background job after a report, enter the spool number of that report. An error ends the job as "Cancelled".
+- **Read a folder:** folder (`inbox`, `archive`, … or a folder's display name), only unread, at most N messages, optionally with the attachments of each message.
+
+### Use it in your own program
+
+```abap
+REPORT zmy_invoice_mail.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_mail_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_mail TYPE REF TO lcl_graph_mail.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA ls_mail TYPE lif_graph_mail=>ty_mail.
+DATA ls_attachment TYPE lif_graph_mail=>ty_attachment.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_spool TYPE rspoid.          " the spool request of your invoice
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+CREATE OBJECT lo_mail EXPORTING io_client = lo_client iv_mailbox = `sap@contoso.com`.
+
+ls_mail-subject = `Invoice 4711`.
+ls_mail-body = `<p>Dear customer, please find the invoice attached.</p>`.
+ls_mail-html = abap_true.
+ls_mail-to = lcl_graph_mail=>addresses( `Derya Kaya <derya@customer.com>; ap@customer.com` ).
+TRY.
+    ls_attachment = lcl_graph_mail=>attachment_from_spool( iv_spool = lv_spool iv_name = `invoice_4711.pdf` ).
+    APPEND ls_attachment TO ls_mail-attachments.
+    lo_mail->send( ls_mail ).
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).   " text, hint and request-id
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
+Reading, for example to process supplier invoices from a mailbox:
+
+```abap
+DATA lt_messages TYPE lif_graph_mail=>ty_messages.
+DATA ls_message TYPE lif_graph_mail=>ty_message.
+DATA lt_attachments TYPE lif_graph_mail=>ty_attachment_infos.
+DATA ls_info TYPE lif_graph_mail=>ty_attachment_info.
+DATA lv_pdf TYPE xstring.
+DATA lv_archive TYPE string.
+
+lt_messages = lo_mail->list( iv_folder = `inbox` iv_unread_only = abap_true iv_max = 50 ).
+lv_archive = lo_mail->folder_id( `SAP processed` ).
+LOOP AT lt_messages INTO ls_message WHERE has_attachments = abap_true.
+  lt_attachments = lo_mail->attachments( ls_message-id ).
+  LOOP AT lt_attachments INTO ls_info WHERE kind = `file` AND inline = abap_false.
+    lv_pdf = lo_mail->attachment_content( iv_message_id = ls_message-id iv_attachment_id = ls_info-id ).
+    " ... your processing
+  ENDLOOP.
+  lo_mail->move_to( iv_message_id = ls_message-id iv_folder = lv_archive ).
+ENDLOOP.
+```
+
 ## Modules (plan)
 
 | Module | Content | Status |
 |---|---|---|
-| Core + connection test | this repository | v0.1 |
-| E-mail | Send (HTML, attachments, spool as PDF, large attachments), then read mailboxes | next |
+| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.2 |
+| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.2 |
 | SharePoint / OneDrive | Upload, download, list, folders, sharing links | planned |
 | SharePoint Lists, Excel, Entra ID users, calendar, Teams notifications | | planned |
 
@@ -137,7 +247,12 @@ ENDTRY.
 
 On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
-- **Unit tests:** 16 ABAP Unit tests pass, with a test double instead of Microsoft. They cover:
+- **E-mail module:** 8 unit tests pass with the same test double, covering:
+  - the request body of a mail with recipients, HTML and an attachment;
+  - a large mail: draft, attachment, upload session, three pieces with the right `Content-Range` and no token on the upload URL, then send;
+  - reading a folder, attachment bytes, marking, moving, folders by name, address texts.
+- **Spool to PDF:** a real spool request (an ABAP list) became a valid PDF of 20,215 bytes (it starts with `%PDF-1.3` and ends with `%EOF`). `ZCHE_GRAPH_MAIL` then attached it and stopped at sign-in, as expected with made-up credentials.
+- **Core unit tests:** 16 ABAP Unit tests pass, with a test double instead of Microsoft. They cover:
   - JSON: objects, arrays, escapes including Turkish letters, numbers, errors;
   - the JSON writer;
   - the token request and caching;
@@ -153,7 +268,10 @@ On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
 **Not verified yet:**
 
-- **A real token and a successful Graph call.** No Microsoft 365 tenant was available.
+- **A real token and a successful Graph call.** No Microsoft 365 tenant was available. So no mail has actually been sent or read; Microsoft's answers are known only from its documentation.
+- **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
+- **Mailbox restriction** (RBAC for Applications or an application access policy).
+- **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:
   - the SM59 user and password fields take a 36-character client ID and a 40-character secret;
   - the classes used (`CL_HTTP_CLIENT`, `CL_HTTP_UTILITY`, `CL_ABAP_CONV_IN_CE`, `CL_ABAP_TSTMP`) behave the same.

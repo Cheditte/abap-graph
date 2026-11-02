@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.1.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.2.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,11 +30,12 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.1.0`.
+  CONSTANTS version TYPE string VALUE `0.2.0`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
   CONSTANTS default_max_retries TYPE i VALUE 3.
+  CONSTANTS default_ssl_id TYPE ssfapplssl VALUE 'ANONYM'.
 
   TYPES:
     BEGIN OF ty_config,
@@ -43,6 +44,8 @@ INTERFACE lif_graph.
       api_destination   TYPE rfcdest,
       api_version       TYPE string,
       max_retries       TYPE i,
+      " SSL client PSE for URLs Microsoft hands out (large uploads)
+      ssl_id            TYPE ssfapplssl,
     END OF ty_config.
 
   TYPES:
@@ -957,12 +960,43 @@ INTERFACE lif_graph_http.
       value(rs_response) TYPE lif_graph=>ty_response
     RAISING
       lcx_graph.
+
+  "! To a full URL that Microsoft hands out with its own access key, for
+  "! example the upload URL of a large attachment. No SM59 destination:
+  "! the proxy comes from SICF (Client > Proxy Settings), the SSL client
+  "! PSE is IV_SSL_ID.
+  METHODS send_url
+    IMPORTING
+      iv_url             TYPE string
+      iv_method          TYPE string
+      it_headers         TYPE tihttpnvp
+      iv_body            TYPE xstring
+      iv_ssl_id          TYPE ssfapplssl
+    RETURNING
+      value(rs_response) TYPE lif_graph=>ty_response
+    RAISING
+      lcx_graph.
 ENDINTERFACE.
 
 
 CLASS lcl_graph_http DEFINITION FINAL.
   PUBLIC SECTION.
     INTERFACES lif_graph_http.
+
+  PRIVATE SECTION.
+    "! Sends the request and reads the answer; IV_TARGET names the target in error texts
+    METHODS execute
+      IMPORTING
+        io_client          TYPE REF TO if_http_client
+        iv_method          TYPE string
+        iv_uri             TYPE string
+        it_headers         TYPE tihttpnvp
+        iv_body            TYPE xstring
+        iv_target          TYPE string
+      RETURNING
+        value(rs_response) TYPE lif_graph=>ty_response
+      RAISING
+        lcx_graph.
 ENDCLASS.
 
 
@@ -970,12 +1004,9 @@ CLASS lcl_graph_http IMPLEMENTATION.
 
   METHOD lif_graph_http~send.
     DATA lo_client TYPE REF TO if_http_client.
-    DATA ls_header TYPE ihttpnvp.
-    DATA lv_code TYPE i.
-    DATA lv_reason TYPE string.
-    DATA lv_message TYPE string.
     DATA lv_text TYPE string.
     DATA lv_hint TYPE string.
+    DATA lv_target TYPE string.
 
     cl_http_client=>create_by_destination(
       EXPORTING
@@ -1009,11 +1040,69 @@ CLASS lcl_graph_http IMPLEMENTATION.
           hint = lv_hint.
     ENDIF.
 
+    CONCATENATE `SM59 destination ` iv_destination INTO lv_target.
+    rs_response = execute( io_client  = lo_client
+                           iv_method  = iv_method
+                           iv_uri     = iv_uri
+                           it_headers = it_headers
+                           iv_body    = iv_body
+                           iv_target  = lv_target ).
+  ENDMETHOD.
+
+
+  METHOD lif_graph_http~send_url.
+    DATA lo_client TYPE REF TO if_http_client.
+    DATA lv_host TYPE string.
+    DATA lv_text TYPE string.
+
+    " Only the host goes into error texts: the rest of the URL is a secret key
+    lv_host = iv_url.
+    REPLACE FIRST OCCURRENCE OF 'https://' IN lv_host WITH ''.
+    SPLIT lv_host AT '/' INTO lv_host lv_text.
+    cl_http_client=>create_by_url(
+      EXPORTING
+        url                = iv_url
+        ssl_id             = iv_ssl_id
+      IMPORTING
+        client             = lo_client
+      EXCEPTIONS
+        argument_not_found = 1
+        plugin_not_active  = 2
+        internal_error     = 3
+        OTHERS             = 4 ).
+    IF sy-subrc <> 0.
+      CONCATENATE `No HTTP client for ` lv_host `.` INTO lv_text.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = lv_text
+          hint = `Ask Basis to check the HTTPS port (SMICM) and the SSL client PSE in STRUST.`.
+    ENDIF.
+    rs_response = execute( io_client  = lo_client
+                           iv_method  = iv_method
+                           iv_uri     = ``
+                           it_headers = it_headers
+                           iv_body    = iv_body
+                           iv_target  = lv_host ).
+  ENDMETHOD.
+
+
+  METHOD execute.
+    DATA lo_client TYPE REF TO if_http_client.
+    DATA ls_header TYPE ihttpnvp.
+    DATA lv_code TYPE i.
+    DATA lv_reason TYPE string.
+    DATA lv_message TYPE string.
+    DATA lv_text TYPE string.
+    DATA lv_hint TYPE string.
+
+    lo_client = io_client.
     " Never show a logon popup or keep cookies; a background job has no one to answer
     lo_client->propertytype_logon_popup = if_http_client=>co_disabled.
     lo_client->propertytype_accept_cookie = if_http_client=>co_disabled.
     lo_client->request->set_method( iv_method ).
-    cl_http_utility=>set_request_uri( request = lo_client->request uri = iv_uri ).
+    IF iv_uri IS NOT INITIAL.
+      cl_http_utility=>set_request_uri( request = lo_client->request uri = iv_uri ).
+    ENDIF.
     LOOP AT it_headers INTO ls_header.
       lo_client->request->set_header_field( name = ls_header-name value = ls_header-value ).
     ENDLOOP.
@@ -1039,7 +1128,7 @@ CLASS lcl_graph_http IMPLEMENTATION.
     IF sy-subrc <> 0.
       lo_client->get_last_error( IMPORTING message = lv_message ).
       lo_client->close( ).
-      CONCATENATE `No connection through SM59 destination ` iv_destination `: ` lv_message INTO lv_text.
+      CONCATENATE `No connection to ` iv_target `: ` lv_message INTO lv_text.
       lv_hint = `Check in SM59 (Connection Test) the host, port 443 and "SSL active"; in STRUST that the SSL client PSE has the Microsoft root certificates; the proxy; and that the kernel supports TLS 1.2.`.
       RAISE EXCEPTION TYPE lcx_graph
         EXPORTING
@@ -1354,6 +1443,19 @@ CLASS lcl_graph_client DEFINITION FINAL.
       RAISING
         lcx_graph.
 
+    "! To a full URL Microsoft handed out with its own key (no token is sent),
+    "! for example an upload URL. Raises LCX_GRAPH from HTTP 400 on.
+    METHODS request_url
+      IMPORTING
+        iv_method          TYPE string
+        iv_url             TYPE string
+        iv_body            TYPE xstring OPTIONAL
+        it_headers         TYPE tihttpnvp OPTIONAL
+      RETURNING
+        value(rs_response) TYPE lif_graph=>ty_response
+      RAISING
+        lcx_graph.
+
     "! The path part of an absolute Graph URL, for example of @odata.nextLink
     CLASS-METHODS path_of_url
       IMPORTING
@@ -1404,6 +1506,7 @@ CLASS lcl_graph_client IMPLEMENTATION.
     rs_config-api_destination = lif_graph=>default_api_destination.
     rs_config-api_version = lif_graph=>default_api_version.
     rs_config-max_retries = lif_graph=>default_max_retries.
+    rs_config-ssl_id = lif_graph=>default_ssl_id.
   ENDMETHOD.
 
 
@@ -1417,6 +1520,9 @@ CLASS lcl_graph_client IMPLEMENTATION.
     ENDIF.
     IF ms_config-api_version IS INITIAL.
       ms_config-api_version = lif_graph=>default_api_version.
+    ENDIF.
+    IF ms_config-ssl_id IS INITIAL.
+      ms_config-ssl_id = lif_graph=>default_ssl_id.
     ENDIF.
     IF io_http IS BOUND.
       mo_http = io_http.
@@ -1633,6 +1739,25 @@ CLASS lcl_graph_client IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD request_url.
+    DATA lv_host TYPE string.
+    DATA lv_rest TYPE string.
+
+    rs_response = mo_http->send_url( iv_url     = iv_url
+                                     iv_method  = iv_method
+                                     it_headers = it_headers
+                                     iv_body    = iv_body
+                                     iv_ssl_id  = ms_config-ssl_id ).
+    IF rs_response-status >= 400.
+      " The URL carries a key: only its host goes into the error text
+      lv_host = iv_url.
+      REPLACE FIRST OCCURRENCE OF 'https://' IN lv_host WITH ''.
+      SPLIT lv_host AT '/' INTO lv_host lv_rest.
+      raise_error( is_response = rs_response iv_method = iv_method iv_path = lv_host ).
+    ENDIF.
+  ENDMETHOD.
+
+
   METHOD path_of_url.
     DATA lv_offset TYPE i.
     DATA lv_rest TYPE string.
@@ -1711,6 +1836,15 @@ CLASS ltd_graph_http IMPLEMENTATION.
 
   METHOD token_answer.
     answer( iv_status = 200 iv_body = `{"token_type":"Bearer","expires_in":3599,"access_token":"TOKEN1"}` ).
+  ENDMETHOD.
+
+
+  METHOD lif_graph_http~send_url.
+    rs_response = lif_graph_http~send( iv_destination = space
+                                       iv_method      = iv_method
+                                       iv_uri         = iv_url
+                                       it_headers     = it_headers
+                                       iv_body        = iv_body ).
   ENDMETHOD.
 
 
