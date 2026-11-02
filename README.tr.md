@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrasında çalışır, S/4HANA dahil.
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.3, henüz yayınlanmadı.** Çekirdek, bağlantı testi, e-posta ve dosya modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.4, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya ve liste modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -348,19 +348,116 @@ TRY.
 ENDTRY.
 ```
 
+## SharePoint listeleri
+
+SharePoint listesi, insanların SharePoint'te tuttuğu bir tablodur. Örnekler: açık faturalar, tedarikçi iletişim listesi, onaylar, fiyat listesi. Bu modül böyle bir listeyi SAP ile uyumlu tutar.
+
+Modülün iki nesnesi var: `ZCHE_GRAPH_LISTS_LIB` include'u (sınıf `LCL_GRAPH_LIST`) ve `ZCHE_GRAPH_LISTS` programı.
+
+- **Sitenin listeleri ve bir listenin sütunları:** iç ad, görünen ad, tür (metin, sayı, para, tarih, evet/hayır, seçim, arama, kişi, …), zorunlu, salt okunur, çoklu değer.
+- **Kayıt okuma:** tüm sütunlar ya da seçilenler, `fields/Status eq 'Open'` gibi bir OData filtresiyle, birden çok sayfa boyunca.
+- **Kayıt oluşturma, değiştirme ve silme.** Yalnızca verdiğiniz alanlar değişir.
+- **Anahtar sütuna göre güncelle ya da oluştur (`upsert`):** örneğin "`InvoiceNo`'su 4711 olan kaydı güncelle, yoksa oluştur". SAP verisini her gece bir listeye yansıtmanın temel adımı bu.
+
+Değerler metin olarak taşınır ve sütunun türüne göre çevrilir:
+
+| Sütun | Nasıl yazılır | Ne olarak gider |
+|---|---|---|
+| Metin, not, tek seçim | `Status=Açık` | metin |
+| Sayı, para | `Amount=1234.56` (ondalık ayırıcı nokta) | sayı |
+| Evet/Hayır | `Paid=X` (ya da `true`, `1`, `yes`, `evet`) | true/false |
+| Tarih | `DueDate=2026-11-30` ya da `2026-11-30T10:00:00Z` | ISO biçiminde metin |
+| Çok değerli seçim | `Tags=kırmızı;mavi` | metin listesi |
+| Arama (lookup) ya da kişi | `CustomerLookupId=12` (ya da `12;15`) | sayı (liste) |
+
+Sütunların **iç adlarını** kullanın: örneğin `Title`, ya da "Tutar" diye görünen bir sütun için `Tutar`. İç adları **Sütunları göster** listeler. Boşluk ya da Türkçe harfle oluşturulmuş bir sütunun iç adı kodlanmış olabilir, örneğin `Fatura_x0020_No`.
+
+### Liste modülünün ek gereksinimleri
+
+| Ne | Neden | Kimden |
+|---|---|---|
+| Sitede yazma yetkili **`Sites.Selected`** (dosya modülüne bakın) ya da `Sites.ReadWrite.All` | Kayıt okuma ve yazma | Microsoft 365 / SharePoint yöneticisi |
+| Büyük listelerde filtre için filtrelenen sütunda **dizin** (liste ayarları → Dizinlenmiş sütunlar) | Dizin yoksa SharePoint 5.000'den fazla kayıtlı listelerde filtreyi reddedebilir. Modül `Prefer: HonorNonIndexedQueriesWarningMayFailRandomly` başlığını gönderir; bu, daha küçük listelerde filtreye izin verir. | Site sahibi |
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE`'dan sonra iki adım:
+1. **SE38** → `ZCHE_GRAPH_LISTS_LIB` (tür **Include program**) → [`src/zche_graph_lists_lib.prog.abap`](src/zche_graph_lists_lib.prog.abap) dosyasını yapıştırın.
+2. **SE38** → `ZCHE_GRAPH_LISTS` (tür **Yürütülebilir program**) → [`src/zche_graph_lists.prog.abap`](src/zche_graph_lists.prog.abap) dosyasını yapıştırıp aktifleştirin.
+
+### Deneyin
+
+`ZCHE_GRAPH_LISTS`'i host, site yolu ve SharePoint'te göründüğü haliyle liste adıyla çalıştırın.
+
+| İşlem | Girilecekler |
+|---|---|
+| **Sitenin listelerini göster** | yok |
+| **Sütunları göster** | yok |
+| **Kayıtları oku** | Sütunlar (`Title,Amount`; boşsa tümü), filtre, en çok N |
+| **Kayıt oluştur ya da değiştir** | Kayıt ID (boşsa yeni kayıt) ve alanlar: `Title=Fatura 4711 \| Amount=1234.56 \| Paid=X` |
+| **Anahtara göre güncelle/oluştur** | Anahtar sütun (örneğin `Title`) ve anahtarın değeri dahil alanlar |
+
+### Kendi programınızda kullanmak
+
+```abap
+REPORT zmy_open_invoices_to_sharepoint.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_lists_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_list TYPE REF TO lcl_graph_list.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+DATA ls_field TYPE lif_graph_lists=>ty_field.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_id TYPE string.
+DATA lv_created TYPE abap_bool.
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_list = lcl_graph_list=>for_site( io_client = lo_client
+                                        iv_host   = `contoso.sharepoint.com`
+                                        iv_site   = `/sites/Finance`
+                                        iv_list   = `Açık faturalar` ).
+    " SAP'deki her açık kalem için:
+    CLEAR lt_fields.
+    ls_field-name = `Title`.  ls_field-value = `4711`.     APPEND ls_field TO lt_fields.
+    ls_field-name = `Amount`. ls_field-value = `1234.56`.  APPEND ls_field TO lt_fields.
+    ls_field-name = `DueDate`. ls_field-value = `2026-11-30`. APPEND ls_field TO lt_fields.
+    lo_list->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields
+                     IMPORTING ev_id = lv_id ev_created = lv_created ).
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modüller (plan)
 
 | Modül | İçerik | Durum |
 |---|---|---|
-| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.3 |
-| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.3 |
-| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.3 |
-| SharePoint Listeleri, Excel, Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
+| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.4 |
+| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.4 |
+| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.4 |
+| SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.4 |
+| Excel, Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
 
 ## Neler doğrulandı
 
 2 Kasım 2026'da, SAP ABAP Platform 2023 deneme sisteminde (SAP_BASIS 7.58):
 
+- **Liste modülü:** aynı test dublörüyle 8 birim testi geçiyor. Kapsadıkları:
+  - metinden alanlar;
+  - sitenin listesini görünen adıyla bulma (gizli listeler dışarıda);
+  - sütun türleri, bir kez okunup hatırlanıyor;
+  - seçilen sütunlar, filtre ve `Prefer` başlığıyla kayıt okuma; çoklu değerler `;` ile birleştiriliyor;
+  - metin, sayı, evet/hayır, çoklu seçim ve arama değerleriyle doğru JSON biçiminde kayıt oluşturma;
+  - virgülle yazılmış sayıyı reddetme;
+  - iki yönde de güncelle ya da oluştur.
+
+  `ZCHE_GRAPH_LISTS` uydurma bilgilerle Microsoft'un giriş adımına kadar çalışıyor.
 - **Dosya modülü:** aynı test dublörüyle 9 birim testi geçiyor. Kapsadıkları:
   - boşluklu yollar;
   - site ve kitaplığı adıyla bulma; kitaplık yoksa mevcut kitaplıkları sayan hata;
@@ -395,6 +492,7 @@ ENDTRY.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
 - **Posta kutusu sınırlaması** (RBAC for Applications ya da application access policy).
 - **SharePoint:** `Sites.Selected` ile site yetkisi verme, gerçek yükleme ve indirme, SICF proxy üzerinden `*.sharepoint.com` yolu.
+- **SharePoint listelerinin Microsoft'ta denenmesi:** çoklu seçim ve arama sütunlarının JSON biçimi Microsoft'un belgelerine göre yazıldı, gerçek bir listede denenmedi; tarihler metin olarak gönderiliyor.
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:
   - SM59'un kullanıcı ve şifre alanlarının 36 karakterlik client ID'yi ve 40 karakterlik secret'ı alıp almadığı;

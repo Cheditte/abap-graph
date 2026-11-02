@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.3.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.4.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,7 +30,7 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.3.0`.
+  CONSTANTS version TYPE string VALUE `0.4.0`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
@@ -160,6 +160,20 @@ CLASS lcl_graph_conv DEFINITION FINAL.
         iv_number      TYPE i
       RETURNING
         value(rv_text) TYPE string.
+
+    "! "/Reports\2026/" -> "Reports/2026": backslashes become slashes, no slash at either end
+    CLASS-METHODS clean_path
+      IMPORTING
+        iv_path        TYPE string
+      RETURNING
+        value(rv_path) TYPE string.
+
+    "! "/Reports/2026/a b.pdf" -> "Reports/2026/a%20b.pdf"; each part is encoded, slashes stay
+    CLASS-METHODS encode_path
+      IMPORTING
+        iv_path        TYPE string
+      RETURNING
+        value(rv_path) TYPE string.
 ENDCLASS.
 
 
@@ -212,6 +226,48 @@ CLASS lcl_graph_conv IMPLEMENTATION.
     DATA lv_text TYPE c LENGTH 12.
     WRITE iv_number TO lv_text LEFT-JUSTIFIED NO-GROUPING.
     rv_text = lv_text.
+  ENDMETHOD.
+
+
+  METHOD clean_path.
+    DATA lv_length TYPE i.
+    DATA lv_last TYPE i.
+
+    rv_path = iv_path.
+    TRANSLATE rv_path USING '\/'.
+    CONDENSE rv_path.
+    WHILE rv_path IS NOT INITIAL AND rv_path(1) = '/'.
+      SHIFT rv_path LEFT BY 1 PLACES.
+    ENDWHILE.
+    DO.
+      lv_length = strlen( rv_path ).
+      IF lv_length = 0.
+        EXIT.
+      ENDIF.
+      lv_last = lv_length - 1.
+      IF rv_path+lv_last(1) <> '/'.
+        EXIT.
+      ENDIF.
+      rv_path = rv_path(lv_last).
+    ENDDO.
+  ENDMETHOD.
+
+
+  METHOD encode_path.
+    DATA lt_parts TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
+    DATA lv_part TYPE string.
+    DATA lv_path TYPE string.
+
+    lv_path = clean_path( iv_path ).
+    SPLIT lv_path AT '/' INTO TABLE lt_parts.
+    LOOP AT lt_parts INTO lv_part.
+      lv_part = url_encode( lv_part ).
+      IF rv_path IS INITIAL.
+        rv_path = lv_part.
+      ELSE.
+        CONCATENATE rv_path '/' lv_part INTO rv_path.
+      ENDIF.
+    ENDLOOP.
   ENDMETHOD.
 
 ENDCLASS.
@@ -1411,6 +1467,7 @@ CLASS lcl_graph_client DEFINITION FINAL.
     METHODS get_json
       IMPORTING
         iv_path        TYPE string
+        it_headers     TYPE tihttpnvp OPTIONAL
       RETURNING
         value(ro_json) TYPE REF TO lcl_graph_json
       RAISING
@@ -1421,6 +1478,7 @@ CLASS lcl_graph_client DEFINITION FINAL.
       IMPORTING
         iv_path         TYPE string
         iv_max_pages    TYPE i DEFAULT 100
+        it_headers      TYPE tihttpnvp OPTIONAL
       RETURNING
         value(rt_pages) TYPE ty_pages
       RAISING
@@ -1692,7 +1750,7 @@ CLASS lcl_graph_client IMPLEMENTATION.
   METHOD get_json.
     DATA ls_response TYPE lif_graph=>ty_response.
     DATA lv_text TYPE string.
-    ls_response = request( iv_method = 'GET' iv_path = iv_path ).
+    ls_response = request( iv_method = 'GET' iv_path = iv_path it_headers = it_headers ).
     lv_text = lcl_graph_conv=>from_utf8( ls_response-body ).
     ro_json = lcl_graph_json=>parse( lv_text ).
   ENDMETHOD.
@@ -1705,7 +1763,7 @@ CLASS lcl_graph_client IMPLEMENTATION.
 
     lv_path = iv_path.
     DO iv_max_pages TIMES.
-      lo_page = get_json( lv_path ).
+      lo_page = get_json( iv_path = lv_path it_headers = it_headers ).
       APPEND lo_page TO rt_pages.
       lv_next = lo_page->get( `@odata.nextLink` ).
       IF lv_next IS INITIAL.
@@ -1775,6 +1833,55 @@ CLASS lcl_graph_client IMPLEMENTATION.
     ELSE.
       rv_path = '/'.
     ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+*----------------------------------------------------------------------*
+* SharePoint sites, shared by the files and lists modules
+*----------------------------------------------------------------------*
+CLASS lcl_graph_site DEFINITION FINAL.
+  PUBLIC SECTION.
+    "! The site's ID. IV_HOST: contoso.sharepoint.com; IV_SITE: /sites/Finance
+    "! (empty for the root site)
+    CLASS-METHODS id
+      IMPORTING
+        io_client    TYPE REF TO lcl_graph_client
+        iv_host      TYPE string
+        iv_site      TYPE string OPTIONAL
+      RETURNING
+        value(rv_id) TYPE string
+      RAISING
+        lcx_graph.
+ENDCLASS.
+
+
+CLASS lcl_graph_site IMPLEMENTATION.
+
+  METHOD id.
+    DATA lo_json TYPE REF TO lcl_graph_json.
+    DATA lv_path TYPE string.
+    DATA lv_site TYPE string.
+    DATA lv_host TYPE string.
+
+    lv_host = iv_host.
+    CONDENSE lv_host.
+    IF lv_host IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `No SharePoint host given.`
+          hint = `Enter the host of your SharePoint, for example contoso.sharepoint.com.`.
+    ENDIF.
+    " /sites/{host}:/sites/Finance, or /sites/{host} for the root site
+    lv_site = lcl_graph_conv=>encode_path( iv_site ).
+    IF lv_site IS INITIAL.
+      CONCATENATE `/sites/` lv_host `?$select=id` INTO lv_path.
+    ELSE.
+      CONCATENATE `/sites/` lv_host `:/` lv_site `?$select=id` INTO lv_path.
+    ENDIF.
+    lo_json = io_client->get_json( lv_path ).
+    rv_id = lo_json->get( `id` ).
   ENDMETHOD.
 
 ENDCLASS.

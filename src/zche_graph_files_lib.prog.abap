@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_FILES_LIB: SharePoint and OneDrive files through
 *& Microsoft Graph (INCLUDE)
-*& abap-graph 0.3.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.4.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_FILES_LIB with type "Include
@@ -280,7 +280,6 @@ CLASS lcl_graph_files IMPLEMENTATION.
   METHOD for_site.
     DATA lo_json TYPE REF TO lcl_graph_json.
     DATA lv_path TYPE string.
-    DATA lv_site TYPE string.
     DATA lv_site_id TYPE string.
     DATA lv_drive_id TYPE string.
     DATA lv_count TYPE i.
@@ -293,16 +292,7 @@ CLASS lcl_graph_files IMPLEMENTATION.
     DATA lt_names TYPE lcl_graph_json=>ty_names.
     DATA lv_names TYPE string.
 
-    " The site: /sites/{host}:/sites/Finance, or /sites/{host} for the root site
-    lv_site = clean_path( iv_site ).
-    IF lv_site IS INITIAL.
-      CONCATENATE `/sites/` iv_host `?$select=id` INTO lv_path.
-    ELSE.
-      lv_site = encode_path( lv_site ).
-      CONCATENATE `/sites/` iv_host `:/` lv_site `?$select=id` INTO lv_path.
-    ENDIF.
-    lo_json = io_client->get_json( lv_path ).
-    lv_site_id = lo_json->get( `id` ).
+    lv_site_id = lcl_graph_site=>id( io_client = io_client iv_host = iv_host iv_site = iv_site ).
 
     " The library: the default one, or the one with this name
     IF iv_library IS INITIAL.
@@ -361,44 +351,12 @@ CLASS lcl_graph_files IMPLEMENTATION.
 
 
   METHOD clean_path.
-    DATA lv_length TYPE i.
-    DATA lv_last TYPE i.
-
-    rv_path = iv_path.
-    TRANSLATE rv_path USING '\/'.
-    CONDENSE rv_path.
-    WHILE rv_path IS NOT INITIAL AND rv_path(1) = '/'.
-      SHIFT rv_path LEFT BY 1 PLACES.
-    ENDWHILE.
-    DO.
-      lv_length = strlen( rv_path ).
-      IF lv_length = 0.
-        EXIT.
-      ENDIF.
-      lv_last = lv_length - 1.
-      IF rv_path+lv_last(1) <> '/'.
-        EXIT.
-      ENDIF.
-      rv_path = rv_path(lv_last).
-    ENDDO.
+    rv_path = lcl_graph_conv=>clean_path( iv_path ).
   ENDMETHOD.
 
 
   METHOD encode_path.
-    DATA lt_parts TYPE lcl_graph_json=>ty_names.
-    DATA lv_part TYPE string.
-    DATA lv_path TYPE string.
-
-    lv_path = clean_path( iv_path ).
-    SPLIT lv_path AT '/' INTO TABLE lt_parts.
-    LOOP AT lt_parts INTO lv_part.
-      lv_part = lcl_graph_conv=>url_encode( lv_part ).
-      IF rv_path IS INITIAL.
-        rv_path = lv_part.
-      ELSE.
-        CONCATENATE rv_path '/' lv_part INTO rv_path.
-      ENDIF.
-    ENDLOOP.
+    rv_path = lcl_graph_conv=>encode_path( iv_path ).
   ENDMETHOD.
 
 

@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.3, not released.** The core, the connection test, the e-mail module and the files module work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.4, not released.** The core, the connection test and the e-mail, files and lists modules work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -319,19 +319,112 @@ TRY.
 ENDTRY.
 ```
 
+## SharePoint lists
+
+A SharePoint list is a table that people keep in SharePoint: open invoices, a supplier contact list, approvals, a price list. The module keeps such a list in step with SAP. It consists of the include `ZCHE_GRAPH_LISTS_LIB` (class `LCL_GRAPH_LIST`) and the program `ZCHE_GRAPH_LISTS`.
+
+- **The lists of a site, and the columns of a list:** internal name, name shown, type (text, number, currency, date, yes/no, choice, lookup, person, …), required, read-only, multiple values.
+- **Read items:** all columns or chosen ones, with an OData filter such as `fields/Status eq 'Open'`, over many pages.
+- **Create, change and delete items.** Only the fields you give are changed.
+- **Update or create by a key column (`upsert`):** for example "update the item whose `InvoiceNo` is 4711, or create it". This is the basic step to mirror SAP data into a list every night.
+
+Values travel as text. Each value is converted by the type of its column:
+
+| Column | Write it as | Sent as |
+|---|---|---|
+| Text, note, single choice | `Status=Open` | text |
+| Number, currency | `Amount=1234.56` (dot as decimal sign) | number |
+| Yes/No | `Paid=X` (also `true`, `1`, `yes`, `evet`) | true/false |
+| Date | `DueDate=2026-11-30` or `2026-11-30T10:00:00Z` | text in ISO format |
+| Choice with several values | `Tags=red;blue` | a list of texts |
+| Lookup or person | `CustomerLookupId=12` (or `12;15`) | a number (list) |
+
+Use the columns' **internal** names (for example `Title`, or `Tutar` for a column shown as "Tutar"). **Show the columns** lists them; a column created with spaces or Turkish letters may have an encoded internal name such as `Fatura_x0020_No`.
+
+### What the lists module needs in addition
+
+| What | Why | Who |
+|---|---|---|
+| **`Sites.Selected`** with write access on the site (see the files module), or `Sites.ReadWrite.All` | Reading and writing items | Microsoft 365 / SharePoint administrator |
+| For filters on large lists: an **index** on the filtered column (list settings → Indexed columns) | Without an index, SharePoint may refuse filters on lists with more than 5,000 items. The module sends the header `Prefer: HonorNonIndexedQueriesWarningMayFailRandomly`, which allows it for smaller lists. | Site owner |
+
+### Install
+
+After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_LISTS_LIB` (type **Include program**) → paste [`src/zche_graph_lists_lib.prog.abap`](src/zche_graph_lists_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_LISTS` (type **Executable program**) → paste [`src/zche_graph_lists.prog.abap`](src/zche_graph_lists.prog.abap) → activate.
+
+### Try it
+
+Run `ZCHE_GRAPH_LISTS` with the host, the site path and the list name as SharePoint shows it.
+
+| Action | Fields |
+|---|---|
+| **Show the lists of the site** | none |
+| **Show the columns** | none |
+| **Read items** | Columns (`Title,Amount`; empty means all), filter, at most N |
+| **Create or change an item** | Item ID (empty creates a new item) and fields: `Title=Invoice 4711 \| Amount=1234.56 \| Paid=X` |
+| **Update or create by key** | Key column (for example `Title`) and the fields, including the key's value |
+
+### Use it in your own program
+
+```abap
+REPORT zmy_open_invoices_to_sharepoint.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_lists_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_list TYPE REF TO lcl_graph_list.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+DATA ls_field TYPE lif_graph_lists=>ty_field.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_id TYPE string.
+DATA lv_created TYPE abap_bool.
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_list = lcl_graph_list=>for_site( io_client = lo_client
+                                        iv_host   = `contoso.sharepoint.com`
+                                        iv_site   = `/sites/Finance`
+                                        iv_list   = `Open invoices` ).
+    " For each open item from SAP:
+    CLEAR lt_fields.
+    ls_field-name = `Title`.  ls_field-value = `4711`.     APPEND ls_field TO lt_fields.
+    ls_field-name = `Amount`. ls_field-value = `1234.56`.  APPEND ls_field TO lt_fields.
+    ls_field-name = `DueDate`. ls_field-value = `2026-11-30`. APPEND ls_field TO lt_fields.
+    lo_list->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields
+                     IMPORTING ev_id = lv_id ev_created = lv_created ).
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modules (plan)
 
 | Module | Content | Status |
 |---|---|---|
-| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.3 |
-| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.3 |
-| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.3 |
-| SharePoint Lists, Excel, Entra ID users, calendar, Teams notifications | | planned |
+| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.4 |
+| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.4 |
+| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.4 |
+| SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.4 |
+| Excel, Entra ID users, calendar, Teams notifications | | planned |
 
 ## What has been verified
 
 On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
+- **Lists module:** 8 unit tests pass with the same test double, covering:
+  - fields from text;
+  - finding a site's list by the name shown (hidden lists left out);
+  - column types, read once and then remembered;
+  - reading items with chosen columns, a filter and the `Prefer` header, and multiple values joined with `;`;
+  - creating an item with text, number, yes/no, multiple choice and lookup values in the right JSON form;
+  - refusing a number written with a comma;
+  - update-or-create in both directions.
+
+  `ZCHE_GRAPH_LISTS` runs through to Microsoft's sign-in with made-up credentials.
 - **Files module:** 9 unit tests pass with the same test double, covering:
   - paths with spaces;
   - finding a site and a library by name, and the error that lists the libraries that exist;
@@ -367,6 +460,7 @@ On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
 - **Mailbox restriction** (RBAC for Applications or an application access policy).
 - **SharePoint:** granting a site with `Sites.Selected`, real uploads and downloads, and the route to `*.sharepoint.com` through the SICF proxy.
+- **SharePoint lists against Microsoft:** the JSON forms for multiple choice and lookup columns follow Microsoft's documentation and were not tried against a real list; dates are passed as text.
 - **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:
   - the SM59 user and password fields take a 36-character client ID and a 40-character secret;

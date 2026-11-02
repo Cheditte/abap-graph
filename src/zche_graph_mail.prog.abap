@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL: send and read e-mail through Microsoft Graph
-*& abap-graph 0.3.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.4.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_MAIL_LIB first,
