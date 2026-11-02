@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.4, not released.** The core, the connection test and the e-mail, files and lists modules work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.5, not released.** The core, the connection test and the e-mail, files, lists and Excel modules work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -401,20 +401,109 @@ TRY.
 ENDTRY.
 ```
 
+## Excel workbooks
+
+Read and write cells of an `.xlsx` file that is in a SharePoint library or a OneDrive, without downloading it. Typical uses:
+- fill a planning or reporting workbook that the business keeps in SharePoint;
+- read a price or rate table that the business maintains in Excel.
+
+The module consists of the include `ZCHE_GRAPH_EXCEL_LIB` (class `LCL_GRAPH_EXCEL`) and the program `ZCHE_GRAPH_EXCEL`. It finds the file through the files module, so it needs `ZCHE_GRAPH_FILES_LIB` too.
+
+- **Worksheets:** list them, add one.
+- **Ranges:**
+  - read, as stored values or as the text Excel shows (dates as dates, numbers formatted);
+  - read everything that is filled on a sheet;
+  - write from a start cell;
+  - clear.
+- **Excel tables** (*Insert → Table*): header, rows, add rows at the end. The table grows by itself, so formulas, pivot tables and charts that use it keep working.
+- **Recalculate** the workbook.
+- **Sessions:** keep the workbook open while you make many changes (`open_session` / `close_session`). This is faster, and the work is saved together.
+
+When writing, a cell that looks like a number (`1234`, `-12.5`, `1e-3`) goes as a number. A text starting with `=` is a formula. `00123`, `+5` and dates like `2026-11-02` stay text, so material numbers keep their leading zeros. A row shorter than the others leaves the rest of its cells unchanged.
+
+Excel cannot create a new file this way. Start from a workbook that exists, for example a template you uploaded once with the files module.
+
+### Install
+
+After `ZCHE_GRAPH_CORE` and `ZCHE_GRAPH_FILES_LIB`: **SE38** → `ZCHE_GRAPH_EXCEL_LIB` (type **Include program**) → paste [`src/zche_graph_excel_lib.prog.abap`](src/zche_graph_excel_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_EXCEL` (type **Executable program**) → paste [`src/zche_graph_excel.prog.abap`](src/zche_graph_excel.prog.abap) → activate. The permissions are the same as for the files module.
+
+### Try it
+
+Run `ZCHE_GRAPH_EXCEL` with the library (as in `ZCHE_GRAPH_FILES`) and the workbook's path, for example `Reports/sales.xlsx`.
+
+| Action | Fields |
+|---|---|
+| **Show sheets and tables** | none |
+| **Read a range** | Worksheet. Range: `A1:D20`, or empty / a single cell for everything that is filled. Optionally "As Excel shows it". |
+| **Write values** | Worksheet, start cell (default `A1`) and values: `Date;Amount \| 2026-11-02;1234.5` (cells separated by `;`, rows by `\|`) |
+| **Read a table** | Table name |
+| **Add rows to a table** | Table name and values, as above |
+
+### Use it in your own program
+
+```abap
+REPORT zmy_fill_sales_workbook.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_files_lib.
+INCLUDE zche_graph_excel_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_files TYPE REF TO lcl_graph_files.
+DATA lo_excel TYPE REF TO lcl_graph_excel.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA lt_rows TYPE lif_graph_excel=>ty_rows.
+DATA lt_row TYPE lif_graph_excel=>ty_row.
+DATA lv_cell TYPE string.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_files = lcl_graph_files=>for_site( io_client = lo_client
+                                          iv_host   = `contoso.sharepoint.com`
+                                          iv_site   = `/sites/Sales` ).
+    lo_excel = lcl_graph_excel=>for_file( io_client = lo_client io_files = lo_files
+                                          iv_path   = `Reports/sales.xlsx` ).
+    " For each line of your SAP data:
+    CLEAR lt_row.
+    lv_cell = `4711`.    APPEND lv_cell TO lt_row.
+    lv_cell = `1234.56`. APPEND lv_cell TO lt_row.
+    APPEND lt_row TO lt_rows.
+    lo_excel->open_session( ).
+    lo_excel->add_table_rows( iv_table = `Sales` it_rows = lt_rows ).
+    lo_excel->close_session( ).
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modules (plan)
 
 | Module | Content | Status |
 |---|---|---|
-| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.4 |
-| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.4 |
-| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.4 |
-| SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.4 |
-| Excel, Entra ID users, calendar, Teams notifications | | planned |
+| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5 |
+| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.5 |
+| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.5 |
+| SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.5 |
+| Excel workbooks | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, see above | v0.5 |
+| Entra ID users, calendar, Teams notifications | | planned |
 
 ## What has been verified
 
 On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
+- **Excel module:** 8 unit tests pass with the same test double, covering:
+  - column letters (A, Z, AA, ZZ, AAA) and block addresses;
+  - values from text;
+  - finding the workbook through the files module, and worksheets;
+  - reading values and the shown text, and the used range;
+  - writing a block (numbers, kept leading zeros, dates and `+5` as text, formulas, `null` for short rows);
+  - the session header on every call;
+  - reading a table and adding rows.
+
+  `ZCHE_GRAPH_EXCEL` runs through to Microsoft's sign-in with made-up credentials.
 - **Lists module:** 8 unit tests pass with the same test double, covering:
   - fields from text;
   - finding a site's list by the name shown (hidden lists left out);
@@ -460,6 +549,7 @@ On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
 - **Mailbox restriction** (RBAC for Applications or an application access policy).
 - **SharePoint:** granting a site with `Sites.Selected`, real uploads and downloads, and the route to `*.sharepoint.com` through the SICF proxy.
+- **Excel against Microsoft:** whether Excel treats every written value as described (numbers, formulas, `null`) was taken from Microsoft's documentation, not tried on a real workbook. Large blocks may hit Microsoft's request size limits.
 - **SharePoint lists against Microsoft:** the JSON forms for multiple choice and lookup columns follow Microsoft's documentation and were not tried against a real list; dates are passed as text.
 - **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:

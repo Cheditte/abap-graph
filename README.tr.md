@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrasında çalışır, S/4HANA dahil.
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.4, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya ve liste modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.5, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste ve Excel modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -434,20 +434,113 @@ TRY.
 ENDTRY.
 ```
 
+## Excel çalışma kitapları
+
+SharePoint kitaplığında ya da OneDrive'da duran bir `.xlsx` dosyasının hücrelerini, dosyayı indirmeden okur ve yazar. Tipik kullanımlar:
+- iş biriminin SharePoint'te tuttuğu bir planlama ya da raporlama kitabını doldurmak;
+- iş biriminin Excel'de bakımını yaptığı bir fiyat ya da oran tablosunu okumak.
+
+Modülün iki nesnesi var: `ZCHE_GRAPH_EXCEL_LIB` include'u (sınıf `LCL_GRAPH_EXCEL`) ve `ZCHE_GRAPH_EXCEL` programı. Dosyayı dosya modülüyle bulur, bu yüzden `ZCHE_GRAPH_FILES_LIB` de gerekir.
+
+- **Çalışma sayfaları:** listeleme, yeni sayfa ekleme.
+- **Aralıklar:**
+  - saklanan değerler ya da Excel'in gösterdiği metin olarak okuma (tarihler tarih, sayılar biçimli);
+  - bir sayfada dolu olan her şeyi okuma;
+  - bir başlangıç hücresinden itibaren yazma;
+  - temizleme.
+- **Excel tabloları** (*Ekle → Tablo*): başlık, satırlar, sona satır ekleme. Tablo kendiliğinden büyür; onu kullanan formüller, pivot tablolar ve grafikler çalışmaya devam eder.
+- **Yeniden hesaplama.**
+- **Oturum:** çok sayıda değişiklik yaparken kitabı açık tutar (`open_session` / `close_session`). Hem daha hızlıdır hem de iş birlikte kaydedilir.
+
+Yazarken sayı gibi görünen hücreler (`1234`, `-12.5`, `1e-3`) sayı olarak, `=` ile başlayan metinler formül olarak gider. `00123`, `+5` ve `2026-11-02` gibi tarihler metin kalır; böylece malzeme numaraları baştaki sıfırlarını korur. Diğerlerinden kısa bir satırın geri kalan hücreleri değişmeden kalır.
+
+Bu yolla yeni Excel dosyası oluşturulamıyor. Var olan bir kitapla başlayın; örneğin dosya modülüyle bir kez yüklediğiniz bir şablon.
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE` ve `ZCHE_GRAPH_FILES_LIB`'den sonra iki adım:
+1. **SE38** → `ZCHE_GRAPH_EXCEL_LIB` (tür **Include program**) → [`src/zche_graph_excel_lib.prog.abap`](src/zche_graph_excel_lib.prog.abap) dosyasını yapıştırın.
+2. **SE38** → `ZCHE_GRAPH_EXCEL` (tür **Yürütülebilir program**) → [`src/zche_graph_excel.prog.abap`](src/zche_graph_excel.prog.abap) dosyasını yapıştırıp aktifleştirin.
+
+İzinler dosya modülüyle aynı.
+
+### Deneyin
+
+`ZCHE_GRAPH_EXCEL`'i kitaplıkla (`ZCHE_GRAPH_FILES`'taki gibi) ve kitabın yoluyla çalıştırın, örneğin `Raporlar/satis.xlsx`.
+
+| İşlem | Girilecekler |
+|---|---|
+| **Sayfaları ve tabloları göster** | yok |
+| **Aralık oku** | Çalışma sayfası ve aralık: `A1:D20`; boş ya da tek hücre yazılırsa sayfada dolu olan her şey okunur. İsteğe bağlı: "Excel'in gösterdiği gibi". |
+| **Değer yaz** | Çalışma sayfası, başlangıç hücresi (varsayılan `A1`) ve değerler: `Tarih;Tutar \| 2026-11-02;1234.5` (hücreler `;`, satırlar `\|` ile ayrılır) |
+| **Tablo oku** | Tablo adı |
+| **Tabloya satır ekle** | Tablo adı ve yukarıdaki gibi değerler |
+
+### Kendi programınızda kullanmak
+
+```abap
+REPORT zmy_fill_sales_workbook.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_files_lib.
+INCLUDE zche_graph_excel_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_files TYPE REF TO lcl_graph_files.
+DATA lo_excel TYPE REF TO lcl_graph_excel.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA lt_rows TYPE lif_graph_excel=>ty_rows.
+DATA lt_row TYPE lif_graph_excel=>ty_row.
+DATA lv_cell TYPE string.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_files = lcl_graph_files=>for_site( io_client = lo_client
+                                          iv_host   = `contoso.sharepoint.com`
+                                          iv_site   = `/sites/Sales` ).
+    lo_excel = lcl_graph_excel=>for_file( io_client = lo_client io_files = lo_files
+                                          iv_path   = `Raporlar/satis.xlsx` ).
+    " SAP verinizin her satırı için:
+    CLEAR lt_row.
+    lv_cell = `4711`.    APPEND lv_cell TO lt_row.
+    lv_cell = `1234.56`. APPEND lv_cell TO lt_row.
+    APPEND lt_row TO lt_rows.
+    lo_excel->open_session( ).
+    lo_excel->add_table_rows( iv_table = `Satislar` it_rows = lt_rows ).
+    lo_excel->close_session( ).
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modüller (plan)
 
 | Modül | İçerik | Durum |
 |---|---|---|
-| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.4 |
-| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.4 |
-| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.4 |
-| SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.4 |
-| Excel, Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
+| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5 |
+| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.5 |
+| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.5 |
+| SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.5 |
+| Excel çalışma kitapları | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, yukarıya bakın | v0.5 |
+| Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
 
 ## Neler doğrulandı
 
 2 Kasım 2026'da, SAP ABAP Platform 2023 deneme sisteminde (SAP_BASIS 7.58):
 
+- **Excel modülü:** aynı test dublörüyle 8 birim testi geçiyor. Kapsadıkları:
+  - sütun harfleri (A, Z, AA, ZZ, AAA) ve blok adresleri;
+  - metinden değerler;
+  - kitabı dosya modülüyle bulma ve çalışma sayfaları;
+  - değerleri ve gösterilen metni okuma, dolu alan;
+  - blok yazma (sayılar, korunan baştaki sıfırlar, metin kalan tarih ve `+5`, formüller, kısa satırlar için `null`);
+  - her çağrıda oturum başlığı;
+  - tablo okuma ve satır ekleme.
+
+  `ZCHE_GRAPH_EXCEL` uydurma bilgilerle Microsoft'un giriş adımına kadar çalışıyor.
 - **Liste modülü:** aynı test dublörüyle 8 birim testi geçiyor. Kapsadıkları:
   - metinden alanlar;
   - sitenin listesini görünen adıyla bulma (gizli listeler dışarıda);
@@ -492,6 +585,7 @@ ENDTRY.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
 - **Posta kutusu sınırlaması** (RBAC for Applications ya da application access policy).
 - **SharePoint:** `Sites.Selected` ile site yetkisi verme, gerçek yükleme ve indirme, SICF proxy üzerinden `*.sharepoint.com` yolu.
+- **Excel'in Microsoft'ta denenmesi:** yazılan her değeri (sayı, formül, `null`) Excel'in anlatıldığı gibi işlediği Microsoft'un belgelerinden alındı, gerçek bir kitapta denenmedi. Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.
 - **SharePoint listelerinin Microsoft'ta denenmesi:** çoklu seçim ve arama sütunlarının JSON biçimi Microsoft'un belgelerine göre yazıldı, gerçek bir listede denenmedi; tarihler metin olarak gönderiliyor.
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:

@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.4.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.5.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,7 +30,7 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.4.0`.
+  CONSTANTS version TYPE string VALUE `0.5.0`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
@@ -1490,6 +1490,7 @@ CLASS lcl_graph_client DEFINITION FINAL.
         iv_method      TYPE string
         iv_path        TYPE string
         iv_json        TYPE string
+        it_headers     TYPE tihttpnvp OPTIONAL
       RETURNING
         value(ro_json) TYPE REF TO lcl_graph_json
       RAISING
@@ -1497,7 +1498,8 @@ CLASS lcl_graph_client DEFINITION FINAL.
 
     METHODS delete_path
       IMPORTING
-        iv_path TYPE string
+        iv_path    TYPE string
+        it_headers TYPE tihttpnvp OPTIONAL
       RAISING
         lcx_graph.
 
@@ -1783,7 +1785,8 @@ CLASS lcl_graph_client IMPLEMENTATION.
     ls_response = request( iv_method       = iv_method
                            iv_path         = iv_path
                            iv_body         = lv_body
-                           iv_content_type = `application/json` ).
+                           iv_content_type = `application/json`
+                           it_headers      = it_headers ).
     lv_text = lcl_graph_conv=>from_utf8( ls_response-body ).
     IF lv_text IS INITIAL.
       lv_text = `{}`.
@@ -1793,7 +1796,7 @@ CLASS lcl_graph_client IMPLEMENTATION.
 
 
   METHOD delete_path.
-    request( iv_method = 'DELETE' iv_path = iv_path ).
+    request( iv_method = 'DELETE' iv_path = iv_path it_headers = it_headers ).
   ENDMETHOD.
 
 
