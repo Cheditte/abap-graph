@@ -436,6 +436,8 @@ ENDTRY.
 
 ## Excel çalışma kitapları
 
+> **Açık soru: kullanıcısız oturum.** Microsoft'un Excel çağrılarına ait başvuru sayfalarında (örneğin [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) ve [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) uygulama izinleri için **"Not supported"** yazıyor. Bu modül de diğerleri gibi uygulama olarak oturum açıyor. Gerçek bir tenant'ta denenene kadar Excel çağrılarının Microsoft'tan hata alacağını varsayın. Dosya modülüyle `.xlsx` dosyasını bütün olarak yükleme ve indirme bundan etkilenmez.
+
 SharePoint kitaplığında ya da OneDrive'da duran bir `.xlsx` dosyasının hücrelerini, dosyayı indirmeden okur ve yazar. Tipik kullanımlar:
 - iş biriminin SharePoint'te tuttuğu bir planlama ya da raporlama kitabını doldurmak;
 - iş biriminin Excel'de bakımını yaptığı bir fiyat ya da oran tablosunu okumak.

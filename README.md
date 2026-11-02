@@ -403,6 +403,8 @@ ENDTRY.
 
 ## Excel workbooks
 
+> **Open question: sign-in without a user.** Microsoft's reference pages for the Excel calls (for example [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) and [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) list application permissions as **"Not supported"**. This module signs in as an application, like the others. Until it has been tried on a real tenant, expect the Excel calls to fail with an error from Microsoft. Uploading and downloading whole `.xlsx` files with the files module is not affected.
+
 Read and write cells of an `.xlsx` file that is in a SharePoint library or a OneDrive, without downloading it. Typical uses:
 - fill a planning or reporting workbook that the business keeps in SharePoint;
 - read a price or rate table that the business maintains in Excel.
