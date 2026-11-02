@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrasında çalışır, S/4HANA dahil.
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.2, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta modülü SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.3, henüz yayınlanmadı.** Çekirdek, bağlantı testi, e-posta ve dosya modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -257,19 +257,120 @@ LOOP AT lt_messages INTO ls_message WHERE has_attachments = abap_true.
 ENDLOOP.
 ```
 
+## SharePoint ve OneDrive dosyaları
+
+Tek bir belge kitaplığındaki dosyalarla çalışır: bir SharePoint sitesinin kitaplığı ya da bir kullanıcının OneDrive'ı. Dosya ve klasörler kitaplıktaki yollarıyla anılır, örneğin `Raporlar/2026/11/satis.xlsx`.
+
+Modülün iki nesnesi var: `ZCHE_GRAPH_FILES_LIB` include'u (sınıf `LCL_GRAPH_FILES`) ve `ZCHE_GRAPH_FILES` programı.
+
+- **Yükleme:** 4 MB'a kadar dosyalar tek istekte, daha büyükleri 3,2 MB'lık parçalarla gider. Aynı adda dosya varsa, seçiminize göre değiştirilir, yeni adla kaydedilir ya da reddedilir.
+- **İndirme:** Microsoft'un verdiği kısa ömürlü indirme adresi üzerinden.
+- **Listeleme:** bir klasörün içeriği; boyut, tarih, son değiştiren ve web bağlantısıyla.
+- **Klasörler:** tek klasör ya da tek seferde bütün bir yol (`ensure_folder` yalnızca eksik klasörleri oluşturur).
+- **Taşıma, yeniden adlandırma, silme.**
+- **Paylaşım bağlantıları:** görüntüleme ya da düzenleme; şirket içindekiler için ya da bağlantıya sahip herkes için.
+
+### Dosya modülünün ek gereksinimleri
+
+| Ne | Neden | Kimden |
+|---|---|---|
+| Yönetici onaylı **`Sites.Selected`** uygulama izni ve ardından SAP'nin kullanacağı **her site için uygulamaya yazma yetkisi** | En az yetki: uygulama yalnızca bu sitelere erişir | Microsoft 365 / SharePoint yöneticisi |
+| *Ya da* `Sites.ReadWrite.All` / `Files.ReadWrite.All` | Daha kolay, ama uygulama **her** siteye erişir; `Files.ReadWrite.All` her OneDrive'a da erişir. Kullanıcı OneDrive'ı için `Files.ReadWrite.All` gerekir. | Microsoft 365 yöneticisi |
+| SAP'nin `<tenant>.sharepoint.com`'a HTTPS ile çıkabilmesi (SICF proxy ayarları, STRUST) | İndirme adresleri ve büyük dosyaların yükleme adresleri oraya gidiyor; bunlar için SM59 hedefi kullanılmıyor | Basis |
+
+**Uygulamaya site yetkisi vermek (`Sites.Selected`).** Yönetici bunu her site için bir kez yapar. Yaygın iki yol var. İkisi de bu projeyle henüz denenmedi; Microsoft'un güncel belgelerinden kontrol edin.
+- **PnP PowerShell** ile:
+  ```powershell
+  Grant-PnPAzureADAppSitePermission -AppId <application (client) ID> -DisplayName "SAP abap-graph" -Site https://contoso.sharepoint.com/sites/Finance -Permissions Write
+  ```
+- **Graph** ile: `Sites.FullControl.All` iznine sahip ayrı bir yönetici uygulamasıyla `POST /sites/{site-id}/permissions` gönderilir. Gövde: `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<application (client) ID>","displayName":"SAP abap-graph"}}]}`.
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE` ve `ZCHE_GRAPH_MAIL_LIB`'den sonra iki adım:
+1. **SE38** → `ZCHE_GRAPH_FILES_LIB` (tür **Include program**) → [`src/zche_graph_files_lib.prog.abap`](src/zche_graph_files_lib.prog.abap) dosyasını yapıştırın.
+2. **SE38** → `ZCHE_GRAPH_FILES` (tür **Yürütülebilir program**) → [`src/zche_graph_files.prog.abap`](src/zche_graph_files.prog.abap) dosyasını yapıştırıp aktifleştirin.
+
+Program e-posta include'unu yalnızca spool talebini PDF'e çevirmek için kullanıyor. Kendi programlarınıza yalnızca çekirdek ve dosya include'u gerekir.
+
+### Deneyin
+
+`ZCHE_GRAPH_FILES`'ı çalıştırıp önce kitaplığı seçin.
+
+**SharePoint sitesi:**
+- host: örneğin `contoso.sharepoint.com`;
+- site yolu: örneğin `/sites/Finance`; kök site için boş bırakın;
+- kitaplık adı: SharePoint'te göründüğü gibi; boşsa varsayılan kitaplık kullanılır (*Belgeler* ya da *Documents*).
+
+**Bir kullanıcının OneDrive'ı:**
+- kullanıcı: örneğin `derya@contoso.com`.
+
+Sonra işlemi seçin:
+
+| İşlem | Girilecekler |
+|---|---|
+| **Klasörü listele** | Yol; boşsa kitaplığın en üstü |
+| **Spool'u PDF olarak yükle** | Spool talebi ve yol. Yol `/` ile bitiyorsa dosya spool'un kendi adını alır. |
+| **Sunucudaki dosyayı yükle** | Uygulama sunucusundaki dosya (AL11'e bakın) ve yol |
+| **Sunucuya indir** | Yol ve uygulama sunucusundaki dosya |
+| **Klasör yolunu oluştur** | Örneğin `Raporlar/2026/11` |
+| **Paylaşım bağlantısı oluştur** | Yol |
+
+Arka plan job'ında hata job'ı "Cancelled" yapar. Böylece bir raporun PDF'ini her gece SharePoint'e koyabilirsiniz.
+
+### Kendi programınızda kullanmak
+
+```abap
+REPORT zmy_report_to_sharepoint.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_files_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_files TYPE REF TO lcl_graph_files.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA ls_item TYPE lif_graph_files=>ty_item.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_xlsx TYPE xstring.          " dosyanız, örneğin bir Excel çıktısı
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_files = lcl_graph_files=>for_site( io_client = lo_client
+                                          iv_host   = `contoso.sharepoint.com`
+                                          iv_site   = `/sites/Finance` ).
+    lo_files->ensure_folder( `Raporlar/2026/11` ).
+    ls_item = lo_files->upload( iv_path = `Raporlar/2026/11/satis.xlsx` iv_content = lv_xlsx ).
+    " ls_item-web_url: dosyanın bağlantısı
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modüller (plan)
 
 | Modül | İçerik | Durum |
 |---|---|---|
-| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.2 |
-| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.2 |
-| SharePoint / OneDrive | Yükleme, indirme, listeleme, klasörler, paylaşım bağlantıları | planlandı |
+| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.3 |
+| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.3 |
+| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.3 |
 | SharePoint Listeleri, Excel, Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
 
 ## Neler doğrulandı
 
 2 Kasım 2026'da, SAP ABAP Platform 2023 deneme sisteminde (SAP_BASIS 7.58):
 
+- **Dosya modülü:** aynı test dublörüyle 9 birim testi geçiyor. Kapsadıkları:
+  - boşluklu yollar;
+  - site ve kitaplığı adıyla bulma; kitaplık yoksa mevcut kitaplıkları sayan hata;
+  - küçük ve büyük yükleme (doğru `Content-Range` ile parçalar, yükleme adresine token gitmiyor);
+  - indirme adresiyle indirme;
+  - iki sayfalık listeleme;
+  - bir yolun yalnızca eksik klasörlerini oluşturma;
+  - yeniden adlandırarak taşıma, paylaşım bağlantısı.
+
+  `ZCHE_GRAPH_FILES` uydurma bilgilerle Microsoft'un giriş adımına kadar çalışıyor.
 - **E-posta modülü:** aynı test dublörüyle 8 birim testi geçiyor. Kapsadıkları:
   - alıcılar, HTML ve ek içeren bir e-postanın istek gövdesi;
   - büyük e-posta: taslak, ek, yükleme oturumu, doğru `Content-Range` ile ve yükleme adresine token gitmeden üç parça, sonra gönderme;
@@ -293,6 +394,7 @@ ENDLOOP.
 - **Gerçek bir token ve başarılı bir Graph çağrısı.** Microsoft 365 tenant'ı yoktu. Bu yüzden henüz gerçekten e-posta gönderilmedi ya da okunmadı; Microsoft'un cevapları yalnızca belgelerinden biliniyor.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
 - **Posta kutusu sınırlaması** (RBAC for Applications ya da application access policy).
+- **SharePoint:** `Sites.Selected` ile site yetkisi verme, gerçek yükleme ve indirme, SICF proxy üzerinden `*.sharepoint.com` yolu.
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:
   - SM59'un kullanıcı ve şifre alanlarının 36 karakterlik client ID'yi ve 40 karakterlik secret'ı alıp almadığı;

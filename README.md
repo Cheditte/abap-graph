@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.2, not released.** The core, the connection test and the e-mail module work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.3, not released.** The core, the connection test, the e-mail module and the files module work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -234,19 +234,114 @@ LOOP AT lt_messages INTO ls_message WHERE has_attachments = abap_true.
 ENDLOOP.
 ```
 
+## SharePoint and OneDrive files
+
+Work with the files of one document library: a library of a SharePoint site, or the OneDrive of a user. Files and folders are named by their path in the library, for example `Reports/2026/11/sales.xlsx`. The module consists of the include `ZCHE_GRAPH_FILES_LIB` (class `LCL_GRAPH_FILES`) and the program `ZCHE_GRAPH_FILES`.
+
+- **Upload:** files up to 4 MB in one request; larger ones in pieces of 3.2 MB. If a file of that name already exists, it is replaced, renamed or refused, as you choose.
+- **Download:** through the short-lived download URL Microsoft hands out.
+- **List** a folder, with size, date, who changed it and the web link.
+- **Folders:** create a single folder, or a whole path at once (`ensure_folder`: only the missing folders are created).
+- **Move, rename, delete.**
+- **Sharing links:** view or edit, for the people of the company or for anyone with the link.
+
+### What the files module needs in addition
+
+| What | Why | Who |
+|---|---|---|
+| Application permission **`Sites.Selected`** with admin consent, and then **write access for the application on each site** SAP may use | Least privilege: the application reaches only those sites | Microsoft 365 / SharePoint administrator |
+| *Or* `Sites.ReadWrite.All` / `Files.ReadWrite.All` | Simpler, but the application reaches **every** site; `Files.ReadWrite.All` also reaches every OneDrive. A user's OneDrive needs `Files.ReadWrite.All`. | Microsoft 365 administrator |
+| SAP may reach `<tenant>.sharepoint.com` with HTTPS (SICF proxy settings, STRUST) | Download URLs and the upload URLs of large files point there; no SM59 destination is used for them | Basis |
+
+**Granting a site to the application (`Sites.Selected`).** An administrator does this once per site. Two common ways; check Microsoft's current documentation, as neither has been tried with this project yet:
+
+- With **PnP PowerShell**:
+  ```powershell
+  Grant-PnPAzureADAppSitePermission -AppId <application (client) ID> -DisplayName "SAP abap-graph" -Site https://contoso.sharepoint.com/sites/Finance -Permissions Write
+  ```
+- With **Graph**, as a separate admin application that has `Sites.FullControl.All`: `POST /sites/{site-id}/permissions` with `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<application (client) ID>","displayName":"SAP abap-graph"}}]}`.
+
+### Install
+
+After `ZCHE_GRAPH_CORE` and `ZCHE_GRAPH_MAIL_LIB`: **SE38** → `ZCHE_GRAPH_FILES_LIB` (type **Include program**) → paste [`src/zche_graph_files_lib.prog.abap`](src/zche_graph_files_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_FILES` (type **Executable program**) → paste [`src/zche_graph_files.prog.abap`](src/zche_graph_files.prog.abap) → activate. The program uses the e-mail include only to turn a spool request into PDF; your own programs need only the core and the files include.
+
+### Try it
+
+Run `ZCHE_GRAPH_FILES` and choose the library:
+
+| Library | Fields | Example |
+|---|---|---|
+| **SharePoint site** | Host | `contoso.sharepoint.com` |
+| | Site path; empty for the root site | `/sites/Finance` |
+| | Library name as SharePoint shows it; empty for the default library (*Documents*, or *Belgeler* in Turkish) | empty |
+| **OneDrive of a user** | User | `derya@contoso.com` |
+
+Then choose one action:
+
+| Action | Fields |
+|---|---|
+| **List a folder** | Path; empty means the top of the library |
+| **Upload spool as PDF** | Spool request and path. A path ending with `/` keeps the spool's own file name. |
+| **Upload a server file** | Application server file (see AL11) and path |
+| **Download to the server** | Path and application server file |
+| **Create folder path** | Path, for example `Reports/2026/11` |
+| **Create a sharing link** | Path |
+
+As a background job, an error ends the job as "Cancelled". This lets you put a report's PDF into SharePoint every night.
+
+### Use it in your own program
+
+```abap
+REPORT zmy_report_to_sharepoint.
+INCLUDE zche_graph_core.
+INCLUDE zche_graph_files_lib.
+
+DATA lo_client TYPE REF TO lcl_graph_client.
+DATA lo_files TYPE REF TO lcl_graph_files.
+DATA ls_config TYPE lif_graph=>ty_config.
+DATA ls_item TYPE lif_graph_files=>ty_item.
+DATA lx_graph TYPE REF TO lcx_graph.
+DATA lv_xlsx TYPE xstring.          " your file, for example an Excel export
+DATA lv_text TYPE string.
+
+ls_config = lcl_graph_client=>default_config( `<directory (tenant) ID>` ).
+CREATE OBJECT lo_client EXPORTING is_config = ls_config.
+TRY.
+    lo_files = lcl_graph_files=>for_site( io_client = lo_client
+                                          iv_host   = `contoso.sharepoint.com`
+                                          iv_site   = `/sites/Finance` ).
+    lo_files->ensure_folder( `Reports/2026/11` ).
+    ls_item = lo_files->upload( iv_path = `Reports/2026/11/sales.xlsx` iv_content = lv_xlsx ).
+    " ls_item-web_url: the link to the file
+  CATCH lcx_graph INTO lx_graph.
+    lv_text = lx_graph->if_message~get_longtext( ).
+    MESSAGE lv_text TYPE 'I'.
+ENDTRY.
+```
+
 ## Modules (plan)
 
 | Module | Content | Status |
 |---|---|---|
-| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.2 |
-| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.2 |
-| SharePoint / OneDrive | Upload, download, list, folders, sharing links | planned |
+| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.3 |
+| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.3 |
+| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.3 |
 | SharePoint Lists, Excel, Entra ID users, calendar, Teams notifications | | planned |
 
 ## What has been verified
 
 On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
+- **Files module:** 9 unit tests pass with the same test double, covering:
+  - paths with spaces;
+  - finding a site and a library by name, and the error that lists the libraries that exist;
+  - small and large uploads (pieces with the right `Content-Range`, no token on the upload URL);
+  - download through the download URL;
+  - listing over two pages;
+  - creating only the missing folders of a path;
+  - moving with renaming, and sharing links.
+
+  `ZCHE_GRAPH_FILES` runs through to Microsoft's sign-in with made-up credentials.
 - **E-mail module:** 8 unit tests pass with the same test double, covering:
   - the request body of a mail with recipients, HTML and an attachment;
   - a large mail: draft, attachment, upload session, three pieces with the right `Content-Range` and no token on the upload URL, then send;
@@ -271,6 +366,7 @@ On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 - **A real token and a successful Graph call.** No Microsoft 365 tenant was available. So no mail has actually been sent or read; Microsoft's answers are known only from its documentation.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
 - **Mailbox restriction** (RBAC for Applications or an application access policy).
+- **SharePoint:** granting a site with `Sites.Selected`, real uploads and downloads, and the route to `*.sharepoint.com` through the SICF proxy.
 - **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:
   - the SM59 user and password fields take a 36-character client ID and a 40-character secret;
