@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL_LIB: e-mail through Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_MAIL_LIB with type "Include
@@ -305,16 +305,47 @@ CLASS lcl_graph_mail IMPLEMENTATION.
 
 
   METHOD addresses.
-    DATA lv_text TYPE string.
     DATA lt_parts TYPE lcl_graph_json=>ty_names.
     DATA lv_part TYPE string.
     DATA ls_address TYPE lif_graph_mail=>ty_address.
     DATA lv_name TYPE string.
     DATA lv_address TYPE string.
+    DATA lv_length TYPE i.
+    DATA lv_offset TYPE i.
+    DATA lv_start TYPE i.
+    DATA lv_count TYPE i.
+    DATA lv_char TYPE c LENGTH 1.
+    DATA lv_quoted TYPE abap_bool.
+    DATA lv_angle TYPE abap_bool.
 
-    lv_text = iv_text.
-    TRANSLATE lv_text USING ',;'.
-    SPLIT lv_text AT ';' INTO TABLE lt_parts.
+    " ; and , separate addresses, but not inside "..." or <...>:
+    " "Kaya, Derya" <derya@b.com> is one address, as Outlook writes it
+    lv_length = strlen( iv_text ).
+    DO lv_length TIMES.
+      lv_offset = sy-index - 1.
+      lv_char = iv_text+lv_offset(1).
+      IF lv_char = '"'.
+        IF lv_quoted = abap_true.
+          lv_quoted = abap_false.
+        ELSE.
+          lv_quoted = abap_true.
+        ENDIF.
+      ELSEIF lv_quoted = abap_false AND lv_char = '<'.
+        lv_angle = abap_true.
+      ELSEIF lv_quoted = abap_false AND lv_char = '>'.
+        lv_angle = abap_false.
+      ELSEIF lv_quoted = abap_false AND lv_angle = abap_false AND ( lv_char = ',' OR lv_char = ';' ).
+        lv_count = lv_offset - lv_start.
+        lv_part = iv_text+lv_start(lv_count).
+        APPEND lv_part TO lt_parts.
+        lv_start = lv_offset + 1.
+      ENDIF.
+    ENDDO.
+    lv_count = lv_length - lv_start.
+    IF lv_count > 0.
+      lv_part = iv_text+lv_start(lv_count).
+      APPEND lv_part TO lt_parts.
+    ENDIF.
     LOOP AT lt_parts INTO lv_part.
       CONDENSE lv_part.
       IF lv_part IS INITIAL.
@@ -991,6 +1022,13 @@ CLASS ltc_graph_mail IMPLEMENTATION.
     READ TABLE lt_addresses INDEX 2 INTO ls_address.
     cl_aunit_assert=>assert_equals( act = ls_address-address exp = `derya@b.com` ).
     cl_aunit_assert=>assert_equals( act = ls_address-name exp = `Derya Kaya` ).
+    " A comma inside the quoted name, as Outlook copies it, does not split
+    lt_addresses = lcl_graph_mail=>addresses( `"Kaya, Derya" <derya@b.com>; ap@x.com, b@y.com` ).
+    lv_count = lines( lt_addresses ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 3 ).
+    READ TABLE lt_addresses INDEX 1 INTO ls_address.
+    cl_aunit_assert=>assert_equals( act = ls_address-name exp = `Kaya, Derya` ).
+    cl_aunit_assert=>assert_equals( act = ls_address-address exp = `derya@b.com` ).
   ENDMETHOD.
 
 

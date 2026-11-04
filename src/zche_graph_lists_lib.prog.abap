@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_LISTS_LIB: SharePoint lists through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_LISTS_LIB with type "Include
@@ -216,6 +216,15 @@ CLASS lcl_graph_list DEFINITION FINAL.
         iv_prefix      TYPE string
       RETURNING
         value(rs_item) TYPE lif_graph_lists=>ty_item.
+
+    "! The value of a field that is an object: the name of a person or lookup,
+    "! the address of a link, the name of a location, or its first plain member
+    CLASS-METHODS object_value
+      IMPORTING
+        io_json         TYPE REF TO lcl_graph_json
+        iv_path         TYPE string
+      RETURNING
+        value(rv_value) TYPE string.
 
     CLASS-METHODS number_json
       IMPORTING
@@ -465,7 +474,12 @@ CLASS lcl_graph_list IMPLEMENTATION.
             ls_column-multiple = abap_true.
           ENDIF.
         ELSEIF ls_column-type = `lookup` OR ls_column-type = `personOrGroup`.
-          CONCATENATE lv_prefix ls_column-type `/allowMultipleValues` INTO lv_field.
+          " Graph names the flag differently for the two facets
+          IF ls_column-type = `lookup`.
+            CONCATENATE lv_prefix `lookup/allowMultipleValues` INTO lv_field.
+          ELSE.
+            CONCATENATE lv_prefix `personOrGroup/allowMultipleSelection` INTO lv_field.
+          ENDIF.
           lv_value = lo_page->get( lv_field ).
           IF lv_value = `true`.
             ls_column-multiple = abap_true.
@@ -568,6 +582,35 @@ CLASS lcl_graph_list IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD object_value.
+    DATA lt_names TYPE lcl_graph_json=>ty_names.
+    DATA lt_known TYPE lcl_graph_json=>ty_names.
+    DATA lv_name TYPE string.
+    DATA lv_path TYPE string.
+    DATA lv_kind TYPE char1.
+    DATA lv_exists TYPE abap_bool.
+
+    SPLIT `LookupValue,Url,DisplayName,Email,Description` AT ',' INTO TABLE lt_known.
+    LOOP AT lt_known INTO lv_name.
+      CONCATENATE iv_path `/` lv_name INTO lv_path.
+      lv_exists = io_json->exists( lv_path ).
+      IF lv_exists = abap_true.
+        rv_value = io_json->get( lv_path ).
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+    lt_names = io_json->names( iv_path ).
+    LOOP AT lt_names INTO lv_name.
+      CONCATENATE iv_path `/` lv_name INTO lv_path.
+      lv_kind = io_json->kind_of( lv_path ).
+      IF lv_kind <> lcl_graph_json=>kind-object AND lv_kind <> lcl_graph_json=>kind-array AND lv_name(1) <> '@'.
+        rv_value = io_json->get( lv_path ).
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
   METHOD item_from_json.
     DATA lt_names TYPE lcl_graph_json=>ty_names.
     DATA lv_name TYPE string.
@@ -611,8 +654,7 @@ CLASS lcl_graph_list IMPLEMENTATION.
           lv_value = io_json->get( lv_element ).
           IF lv_value IS INITIAL.
             " An object in the array, for example a person: take its name
-            CONCATENATE lv_element `/LookupValue` INTO lv_element.
-            lv_value = io_json->get( lv_element ).
+            lv_value = object_value( io_json = io_json iv_path = lv_element ).
           ENDIF.
           IF ls_field-value IS INITIAL.
             ls_field-value = lv_value.
@@ -621,7 +663,8 @@ CLASS lcl_graph_list IMPLEMENTATION.
           ENDIF.
         ENDDO.
       ELSEIF lv_kind = lcl_graph_json=>kind-object.
-        CONTINUE.
+        " A link, a location, a single person or lookup: not left out
+        ls_field-value = object_value( io_json = io_json iv_path = lv_field ).
       ELSE.
         ls_field-value = io_json->get( lv_field ).
       ENDIF.
@@ -875,7 +918,7 @@ CLASS ltc_graph_list IMPLEMENTATION.
                 `{"name":"Amount","displayName":"Tutar","currency":{"locale":"tr-TR"}},`
                 `{"name":"Done","displayName":"Bitti","boolean":{}},`
                 `{"name":"Tags","displayName":"Etiketler","choice":{"displayAs":"checkBoxes","choices":["a","b"]}},`
-                `{"name":"Owner","displayName":"Sorumlu","personOrGroup":{"allowMultipleValues":false}},`
+                `{"name":"Owner","displayName":"Sorumlu","personOrGroup":{"allowMultipleSelection":true}},`
                 `{"name":"Modified","displayName":"Modified","dateTime":{},"readOnly":true}]}` INTO lv_json.
     mo_http->answer( iv_status = 200 iv_body = lv_json ).
   ENDMETHOD.
@@ -932,6 +975,8 @@ CLASS ltc_graph_list IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = ls_column-multiple exp = abap_true ).
     READ TABLE lt_columns INTO ls_column WITH KEY name = `Modified`.
     cl_aunit_assert=>assert_equals( act = ls_column-read_only exp = abap_true ).
+    READ TABLE lt_columns INTO ls_column WITH KEY name = `Owner`.
+    cl_aunit_assert=>assert_equals( act = ls_column-multiple exp = abap_true ).
     " The second call is answered from memory
     lt_columns = mo_cut->columns( ).
     lv_count = lines( mo_http->mt_requests ).
@@ -950,7 +995,8 @@ CLASS ltc_graph_list IMPLEMENTATION.
     DATA lv_count TYPE i.
 
     CONCATENATE `{"value":[{"id":"5","createdDateTime":"2026-11-01T08:00:00Z",`
-                `"fields":{"@odata.etag":"\"x,1\"","Title":"Fatura 4711","Amount":1234.5,"Tags":["a","b"]}}]}` INTO lv_json.
+                `"fields":{"@odata.etag":"\"x,1\"","Title":"Fatura 4711","Amount":1234.5,"Tags":["a","b"],`
+                `"Link":{"Description":"PDF","Url":"https://x/f.pdf"},"Owner":{"LookupId":"7","LookupValue":"Derya Kaya"}}}]}` INTO lv_json.
     mo_http->answer( iv_status = 200 iv_body = lv_json ).
     APPEND `Title` TO lt_select.
     APPEND `Amount` TO lt_select.
@@ -958,7 +1004,11 @@ CLASS ltc_graph_list IMPLEMENTATION.
     READ TABLE lt_items INDEX 1 INTO ls_item.
     cl_aunit_assert=>assert_equals( act = ls_item-id exp = `5` ).
     lv_count = lines( ls_item-fields ).
-    cl_aunit_assert=>assert_equals( act = lv_count exp = 3 ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 5 ).
+    lv_value = lcl_graph_list=>value_of( it_fields = ls_item-fields iv_name = `Link` ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `https://x/f.pdf` ).
+    lv_value = lcl_graph_list=>value_of( it_fields = ls_item-fields iv_name = `Owner` ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `Derya Kaya` ).
     lv_value = lcl_graph_list=>value_of( it_fields = ls_item-fields iv_name = `Amount` ).
     cl_aunit_assert=>assert_equals( act = lv_value exp = `1234.5` ).
     lv_value = lcl_graph_list=>value_of( it_fields = ls_item-fields iv_name = `Tags` ).
