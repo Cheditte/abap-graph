@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_FILES_LIB: SharePoint and OneDrive files through
 *& Microsoft Graph (INCLUDE)
-*& abap-graph 0.5.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_FILES_LIB with type "Include
@@ -510,7 +510,8 @@ CLASS lcl_graph_files IMPLEMENTATION.
 
 
   METHOD download.
-    " Graph hands out a short-lived download URL with its own key; no token goes there
+    " Graph hands out a short-lived download URL with its own key; no token goes there.
+    " SharePoint leaves the URL out when it is asked with $select; select works
     DATA lo_json TYPE REF TO lcl_graph_json.
     DATA ls_response TYPE lif_graph=>ty_response.
     DATA lv_path TYPE string.
@@ -518,7 +519,7 @@ CLASS lcl_graph_files IMPLEMENTATION.
     DATA lv_text TYPE string.
 
     lv_path = item_path( iv_path = iv_path ).
-    CONCATENATE lv_path `?$select=id,@microsoft.graph.downloadUrl` INTO lv_path.
+    CONCATENATE lv_path `?select=id,@microsoft.graph.downloadUrl` INTO lv_path.
     lo_json = mo_client->get_json( lv_path ).
     lv_url = lo_json->get( `@microsoft.graph.downloadUrl` ).
     IF lv_url IS INITIAL.
@@ -874,6 +875,8 @@ CLASS ltc_graph_files IMPLEMENTATION.
     lv_content = mo_cut->download( `Reports/a.pdf` ).
     lv_expected = lcl_graph_conv=>to_utf8( `%PDF-1.7` ).
     cl_aunit_assert=>assert_equals( act = lv_content exp = lv_expected ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/drives/D1/root:/Reports/a.pdf?select=id,@microsoft.graph.downloadUrl` ).
     ls_request = request_at( 3 ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `https://contoso.sharepoint.com/dl?k=2` ).
   ENDMETHOD.

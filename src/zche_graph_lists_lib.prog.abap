@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_LISTS_LIB: SharePoint lists through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.5.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_LISTS_LIB with type "Include
