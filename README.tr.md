@@ -13,10 +13,10 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 **Ürün modülleri** bunun üstüne kurulur: önce e-posta, sonra SharePoint/OneDrive, Listeler, Excel, Entra ID ve takvim.
 
 - **Kopyala-yapıştır:** kaynak SE38'e yapıştırılır. Tablo ya da sözlük nesnesi yok; abapGit isteğe bağlı.
-- **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrasında çalışır, S/4HANA dahil.
+- **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.5.1, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste ve Excel modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.6.0, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -31,7 +31,8 @@ SAP programı ──INCLUDE zche_graph_core──┐
    - Token, süresinin dolmasına beş dakika kalana kadar saklanır.
 2. **Çağrılar:** SM59 hedefi `ZCHE_GRAPH_API` üzerinden, bu token'la yapılır.
 3. **Hatalar:**
-   - HTTP 429, 503 ve 504'te Microsoft'un istediği süre beklenip yeniden denenir (`Retry-After`, en fazla 60 saniye).
+   - HTTP 429'da Microsoft'un istediği süre beklenip yeniden denenir (`Retry-After`, en fazla 60 saniye).
+   - HTTP 503 ve 504'te aynısı yalnız GET, PUT ve DELETE için yapılır. POST ya da PATCH (e-posta gönderme, kayıt oluşturma) hatadan önce yerine getirilmiş olabilir; bu yüzden tekrar gönderilmez ve hata, sonucun belirsiz olduğunu söyler.
    - HTTP 401'de bir kez yeni token alınır.
    - Diğer hatalarda `LCX_GRAPH` fırlatılır. İçinde Microsoft'un hata kodu, mesajı, `request-id` ve neyin kontrol edileceğine dair bir ipucu vardır.
 
@@ -278,7 +279,7 @@ Modülün iki nesnesi var: `ZCHE_GRAPH_FILES_LIB` include'u (sınıf `LCL_GRAPH_
 | *Ya da* `Sites.ReadWrite.All` / `Files.ReadWrite.All` | Daha kolay, ama uygulama **her** siteye erişir; `Files.ReadWrite.All` her OneDrive'a da erişir. Kullanıcı OneDrive'ı için `Files.ReadWrite.All` gerekir. | Microsoft 365 yöneticisi |
 | SAP'nin `<tenant>.sharepoint.com`'a HTTPS ile çıkabilmesi (SICF proxy ayarları, STRUST) | İndirme adresleri ve büyük dosyaların yükleme adresleri oraya gidiyor; bunlar için SM59 hedefi kullanılmıyor | Basis |
 
-**Uygulamaya site yetkisi vermek (`Sites.Selected`).** Yönetici bunu her site için bir kez yapar. Yaygın iki yol var. İkisi de bu projeyle henüz denenmedi; Microsoft'un güncel belgelerinden kontrol edin.
+**Uygulamaya site yetkisi vermek (`Sites.Selected`).** Yönetici bunu her site için bir kez yapar. Yaygın iki yol var; Microsoft'un güncel belgelerinden kontrol edin. Graph yolu test tenant'ında bir kez kullanıldı (bir sitede `write`); PnP yolu denenmedi.
 - **PnP PowerShell** ile:
   ```powershell
   Grant-PnPAzureADAppSitePermission -AppId <application (client) ID> -DisplayName "SAP abap-graph" -Site https://contoso.sharepoint.com/sites/Finance -Permissions Write
@@ -357,7 +358,7 @@ Modülün iki nesnesi var: `ZCHE_GRAPH_LISTS_LIB` include'u (sınıf `LCL_GRAPH_
 - **Sitenin listeleri ve bir listenin sütunları:** iç ad, görünen ad, tür (metin, sayı, para, tarih, evet/hayır, seçim, arama, kişi, …), zorunlu, salt okunur, çoklu değer.
 - **Kayıt okuma:** tüm sütunlar ya da seçilenler, `fields/Status eq 'Open'` gibi bir OData filtresiyle, birden çok sayfa boyunca.
 - **Kayıt oluşturma, değiştirme ve silme.** Yalnızca verdiğiniz alanlar değişir.
-- **Anahtar sütuna göre güncelle ya da oluştur (`upsert`):** örneğin "`InvoiceNo`'su 4711 olan kaydı güncelle, yoksa oluştur". SAP verisini her gece bir listeye yansıtmanın temel adımı bu.
+- **Anahtar sütuna göre güncelle ya da oluştur (`upsert`):** örneğin "`InvoiceNo`'su 4711 olan kaydı güncelle, yoksa oluştur". SAP verisini her gece bir listeye yansıtmanın temel adımı bu. Aynı anda çalışan iki iş ikisi de kaydı bulamayıp ikisi de oluşturabilir. Bunu önlemek için SharePoint'te anahtar sütunda **Benzersiz değerler zorunlu** (Enforce unique values) ayarını açın. İkinci oluşturma o zaman reddedilir ve modül diğer işin oluşturduğu kaydı günceller.
 
 Değerler metin olarak taşınır ve sütunun türüne göre çevrilir:
 
@@ -452,7 +453,7 @@ Modülün iki nesnesi var: `ZCHE_GRAPH_EXCEL_LIB` include'u (sınıf `LCL_GRAPH_
   - temizleme.
 - **Excel tabloları** (*Ekle → Tablo*): başlık, satırlar, sona satır ekleme. Tablo kendiliğinden büyür; onu kullanan formüller, pivot tablolar ve grafikler çalışmaya devam eder.
 - **Yeniden hesaplama.**
-- **Oturum:** çok sayıda değişiklik yaparken kitabı açık tutar (`open_session` / `close_session`). Hem daha hızlıdır hem de iş birlikte kaydedilir.
+- **Oturum:** çok sayıda değişiklik yaparken kitabı açık tutar (`open_session` / `close_session`). Daha hızlıdır. Bir işlem (transaction) değildir: sonraki bir değişiklik hata verirse öncekiler yazılmış kalır.
 
 Yazarken sayı gibi görünen hücreler (`1234`, `-12.5`, `1e-3`) sayı olarak, `=` ile başlayan metinler formül olarak gider. Diğer metinler, Excel'e `'00123` yazar gibi başlarında bir kesme işaretiyle gider. Böylece `00123`, `+5` ve `2026-11-02` gibi tarihler metin kalır, malzeme numaraları baştaki sıfırlarını korur. Excel kesme işaretini göstermez; okurken metin kesme işareti olmadan geri gelir. Diğerlerinden kısa bir satırın geri kalan hücreleri değişmeden kalır.
 
@@ -518,6 +519,119 @@ TRY.
 ENDTRY.
 ```
 
+## Entra ID kullanıcıları ve grupları
+
+Şirketin çalışanlarını Microsoft Entra ID'de göründükleri gibi okur. Hiçbir şeyi değiştirmez. Tipik kullanımlar:
+- onay için talep sahibinin yöneticisini bulmak;
+- bir grubun üyelerine (örneğin "SAP onaycıları") e-posta göndermek;
+- ayrılan çalışanların SAP kullanıcılarını bulmak: Microsoft hesabı kapatılmış ya da silinmiş, ama SAP kullanıcısı hâlâ aktif.
+
+Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_GRAPH_USERS` programından oluşur.
+
+- **Bir kullanıcı:** kullanıcı asıl adı (UPN), e-posta adresi ya da ID ile. Ad, unvan, departman, ofis, telefon, personel no, şirket ve hesabın açık olup olmadığı gelir.
+- **Filtreyle kullanıcılar:** örneğin `department eq 'Finance'`, `employeeId eq '00001234'` ya da `accountEnabled eq false`. Filtre yoksa tüm kullanıcılar gelir.
+- **Yönetici ve doğrudan bağlı çalışanlar.**
+- **Kullanıcının grupları** ve **bir grubun üyeleri** (adıyla ya da ID'siyle); istenirse iç içe gruplar dahil.
+- **SAP hesap kontrolü:** SU01'deki e-posta adresinin Microsoft hesabı olmayan ya da yalnız kapalı hesabı olan aktif SAP diyalog kullanıcıları (kilitli değil, bugün geçerli). Adres, büyük-küçük harfe bakılmadan e-posta ve UPN ile karşılaştırılır. SU01'de adresi olmayan kullanıcılar sayılır ama karşılaştırılmaz.
+
+### Kullanıcı modülünün ek gereksinimleri
+
+| Ne | Neden | Kim |
+|---|---|---|
+| Yönetici onaylı **`User.Read.All`** uygulama izni | Kullanıcıları, yöneticileri, bağlı çalışanları okumak | Microsoft 365 / Entra yöneticisi |
+| Yönetici onaylı **`GroupMember.Read.All`** uygulama izni | Gruplar ve üyeleri | Microsoft 365 / Entra yöneticisi |
+| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi | Program kullanıcı ana verisini doğrudan okur | SAP yetki yöneticisi |
+
+Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE`'dan sonra: **SE38** → `ZCHE_GRAPH_USERS_LIB` (tür **Include program**) → [`src/zche_graph_users_lib.prog.abap`](src/zche_graph_users_lib.prog.abap) yapıştırın. Sonra **SE38** → `ZCHE_GRAPH_USERS` (tür **Executable program**) → [`src/zche_graph_users.prog.abap`](src/zche_graph_users.prog.abap) yapıştırın → etkinleştirin.
+
+### Deneyin
+
+| İşlem | Alanlar |
+|---|---|
+| **Kullanıcıyı göster** | Kullanıcı: adres, UPN ya da ID. Ayrıntıları, yöneticiyi, bağlı çalışanları ve grupları gösterir. |
+| **Kullanıcı ara** | Filtre (boş: tümü) ve en çok kaç kullanıcı |
+| **Grubun üyeleri** | Grup adı ya da ID; istenirse "İç içe grupları da al" |
+| **SAP kullanıcıları: hesap** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
+
+Hesap kontrolü aylık bir arka plan işine uygundur; listesi spool'a düşer.
+
+### Kendi programınızda kullanmak
+
+```abap
+DATA lo_users TYPE REF TO lcl_graph_users.
+DATA ls_manager TYPE lif_graph_users=>ty_user.
+DATA lt_members TYPE lif_graph_users=>ty_users.
+
+CREATE OBJECT lo_users EXPORTING io_client = lo_client.
+ls_manager = lo_users->manager( `derya@contoso.com` ).
+IF ls_manager IS INITIAL.
+  " Entra ID'de yönetici tanımlı değil
+ENDIF.
+lt_members = lo_users->members( iv_group = `SAP onaycıları` iv_nested = abap_true ).
+```
+
+## Outlook takvimi
+
+SAP'deki tarihleri Outlook takvimlerine koyar. Tipik kullanımlar:
+- bir bakım emri, bakım ekibinin takviminde etkinlik olur;
+- bir teslim ya da muayene tarihi ilgililere davet olarak gider;
+- ortak bir takvim (paylaşılan posta kutusunun takvimi) bir SAP sürecinin tarihlerini gösterir.
+
+Modül, `ZCHE_GRAPH_CALENDAR_LIB` include'u (`LCL_GRAPH_CALENDAR` sınıfı) ve `ZCHE_GRAPH_CALENDAR` programından oluşur.
+
+- **Etkinlik oluşturma:** bir kullanıcının ya da paylaşılan posta kutusunun takviminde. Konu, metin, saat ya da tüm gün, yer, zorunlu ve isteğe bağlı katılımcılar (davet alırlar), hatırlatma, "farklı göster", kategoriler.
+- **Kendi anahtarınız** (`transaction_id`), örneğin emir numarası: Microsoft bir anahtar için yalnız bir etkinlik oluşturur. Aynı iş iki kez çalışsa da iki etkinlik olmaz.
+- **Listeleme:** bir dönemin etkinlikleri; yinelenen etkinliklerin her tekrarı ayrı satırdır.
+- **Değiştirme** (katılımcılara güncelleme gider), **iptal** (katılımcılara açıklamayla iptal gider) ya da yalnız bu takvimden **silme**.
+
+Tarih ve saatler, bir SAP saat dilimindeki SAP tarih ve saatleridir; varsayılan, kullanıcının saat dilimidir (`SY-ZONLO`, SU01'de). Microsoft'a UTC olarak gider ve aynı SAP saat dilimine çevrilerek döner; yaz saati SAP'nin kendi saat dilimi tablolarıyla hesaplanır.
+
+### Takvim modülünün ek gereksinimleri
+
+| Ne | Neden | Kim |
+|---|---|---|
+| Yönetici onaylı **`Calendars.ReadWrite`** uygulama izni | Etkinlik oluşturmak ve okumak | Microsoft 365 / Entra yöneticisi |
+| **SAP posta kutularıyla sınırlama** | Sınırlama olmazsa uygulama şirketin **her** takvimine yazabilir | Exchange Online yöneticisi |
+
+Sınırlamayı e-posta modülünde anlatıldığı gibi yapın; RBAC for Applications ile rol `Application Calendars.ReadWrite` olur.
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE`'dan sonra: **SE38** → `ZCHE_GRAPH_CALENDAR_LIB` (tür **Include program**) → [`src/zche_graph_calendar_lib.prog.abap`](src/zche_graph_calendar_lib.prog.abap) yapıştırın. Sonra **SE38** → `ZCHE_GRAPH_CALENDAR` (tür **Executable program**) → [`src/zche_graph_calendar.prog.abap`](src/zche_graph_calendar.prog.abap) yapıştırın → etkinleştirin.
+
+### Deneyin
+
+`ZCHE_GRAPH_CALENDAR`'ı tenant ve takvimi kullanılacak posta kutusuyla çalıştırın.
+
+| İşlem | Alanlar |
+|---|---|
+| **Etkinlikleri listele** | Başlangıç ve bitiş tarihi |
+| **Etkinlik oluştur** | Tarih, başlangıç ve bitiş saati ya da "Tüm gün", konu; isteğe bağlı yer, katılımcılar (`a@x.com; b@x.com`), metin, hatırlatma, anahtarınız |
+| **İptal et** | Etkinlik ID (listeden) ve açıklama |
+| **Bu takvimden sil** | Etkinlik ID |
+
+### Kendi programınızda kullanmak
+
+```abap
+DATA lo_calendar TYPE REF TO lcl_graph_calendar.
+DATA ls_event TYPE lif_graph_calendar=>ty_event.
+
+CREATE OBJECT lo_calendar EXPORTING io_client = lo_client iv_mailbox = `bakim@contoso.com`.
+ls_event-subject = `Bakım: Pres 3`.
+ls_event-start_date = '20261110'.
+ls_event-start_time = '090000'.
+ls_event-end_time = '113000'.
+ls_event-location = `Hol B`.
+ls_event-transaction_id = `PM-4711`.
+APPEND `derya@contoso.com` TO ls_event-attendees.
+ls_event = lo_calendar->create( ls_event ).
+" Etkinliği sonra değiştirmek ya da iptal etmek için ls_event-id'yi emirle birlikte saklayın
+```
+
 ## Modüller (plan)
 
 | Modül | İçerik | Durum |
@@ -527,7 +641,9 @@ ENDTRY.
 | SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.5.1 |
 | SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.5.1 |
 | Excel çalışma kitapları | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, yukarıya bakın | v0.5.1 |
-| Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
+| Entra ID kullanıcıları ve grupları | `ZCHE_GRAPH_USERS_LIB`, `ZCHE_GRAPH_USERS`, yukarıya bakın | v0.6.0 |
+| Outlook takvimi | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, yukarıya bakın | v0.6.0 |
+| Teams bildirimleri | | planlandı |
 
 ## Neler doğrulandı
 
@@ -537,7 +653,7 @@ SAP ABAP Cloud Developer Trial 2025 sisteminde (SAP_BASIS 816).
 
 Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM59'da; programlar seçim ekranlarından çalıştırıldı.
 
-> **Önce bunu okuyun:** uygulamada `Organization.Read.All` ve `Sites.Selected` (bir test sitesinde `write` yetkisiyle) dışında, testler sırasında geniş **`Sites.FullControl.All`** izni de vardı. Bu yüzden sonuçlar çağrıların çalıştığını gösterir. Yalnız `Sites.Selected`'ın yettiğini ya da başka sitelerin ve OneDrive'ların kapalı kaldığını **göstermez**. E-posta için uygulamada tüm tenant'ı kapsayan `Mail.Send` ve `Mail.ReadWrite` vardı; yukarıda anlatılan posta kutusu sınırlaması yoktu.
+> **Önce bunu okuyun:** uygulamada `Organization.Read.All` ve `Sites.Selected` (bir test sitesinde `write` yetkisiyle) dışında, testler sırasında geniş **`Sites.FullControl.All`** izni de vardı. Bu yüzden sonuçlar çağrıların çalıştığını gösterir. Yalnız `Sites.Selected`'ın yettiğini ya da başka sitelerin ve OneDrive'ların kapalı kaldığını **göstermez**. E-posta ve takvim için uygulamada tüm tenant'ı kapsayan `Mail.Send`, `Mail.ReadWrite` ve `Calendars.ReadWrite` vardı; yukarıda anlatılan posta kutusu sınırlaması yoktu.
 
 ![Test tenant'ında ZCHE_GRAPH_CHECK](docs/img/check-connection.png)
 
@@ -560,6 +676,9 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 - **E-posta:** `ZCHE_GRAPH_MAIL` paylaşılan bir posta kutusundan kendisine kısa bir metin e-postası gönderdi, sonra gelen kutusundaki okunmamış e-postaları listeledi; gönderilen e-posta listedeydi.
 
 ![Test e-postası, SAP'den geri okunurken](docs/img/mail-read.png)
+
+- **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı, her paylaşılan kutuda olduğu gibi; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yok. Karşılaştırmanın kendisi yalnız birim testiyle sınandı.
+- **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi. Aynı anahtarla tekrar çalıştırılınca aynı etkinlik döndü; takvimde yine tek etkinlik vardı.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
@@ -623,10 +742,11 @@ Tenant'ta bulunup 0.5.1'de düzeltilenler:
 **Henüz doğrulanmadı:**
 - **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
+- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı ve tüm gün etkinlikler, değiştirme, iptal ve silme.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
 - **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.
-- **SharePoint listelerinin Microsoft'ta denenmesi:** arama (lookup) sütunları, kayıt silme.
+- **SharePoint listelerinin Microsoft'ta denenmesi:** arama (lookup) sütunları, kayıt silme, aynı anahtarı aynı anda oluşturan iki iş (yalnız uydurma cevaplı bir birim testi var).
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:
   - SM59'un kullanıcı ve şifre alanlarının 36 karakterlik client ID'yi ve 40 karakterlik secret'ı alıp almadığı;

@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL_LIB: Excel workbooks in SharePoint or OneDrive
 *& through Microsoft Graph (INCLUDE)
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_EXCEL_LIB with type "Include
@@ -384,8 +384,8 @@ CLASS lcl_graph_excel IMPLEMENTATION.
       CLEAR lt_row.
       SPLIT lv_line AT ';' INTO TABLE lt_row.
       LOOP AT lt_row INTO lv_cell.
-        SHIFT lv_cell LEFT DELETING LEADING space.
-        CONDENSE lv_cell.
+        " Blanks inside a cell stay: ACME  LTD, ="A  B"
+        lv_cell = lcl_graph_conv=>trim( lv_cell ).
         MODIFY lt_row FROM lv_cell.
       ENDLOOP.
       APPEND lt_row TO rt_rows.
@@ -395,53 +395,7 @@ CLASS lcl_graph_excel IMPLEMENTATION.
 
   METHOD is_number.
     " 1234, -12.5, 1e3 are numbers; 00123, 1.234,50, +5 and 2026-11-02 are not
-    DATA lv_rest TYPE string.
-    DATA lv_length TYPE i.
-    DATA lv_offset TYPE i.
-    DATA lv_previous TYPE i.
-    DATA lv_char TYPE c LENGTH 1.
-    DATA lv_dots TYPE i.
-    DATA lv_exponents TYPE i.
-
-    rv_number = abap_false.
-    lv_rest = iv_value.
-    IF lv_rest IS INITIAL OR lv_rest CN '0123456789.-eE'.
-      RETURN.
-    ENDIF.
-    IF lv_rest(1) = '-'.
-      SHIFT lv_rest LEFT BY 1 PLACES.
-    ENDIF.
-    IF lv_rest IS INITIAL OR lv_rest(1) NA '0123456789'.
-      RETURN.
-    ENDIF.
-    lv_length = strlen( lv_rest ).
-    IF lv_length > 1 AND lv_rest(1) = '0' AND lv_rest+1(1) <> '.'.
-      RETURN.
-    ENDIF.
-    DO lv_length TIMES.
-      lv_offset = sy-index - 1.
-      lv_char = lv_rest+lv_offset(1).
-      CASE lv_char.
-        WHEN '.'.
-          lv_dots = lv_dots + 1.
-        WHEN 'e' OR 'E'.
-          lv_exponents = lv_exponents + 1.
-        WHEN '-'.
-          " Only right after the e of an exponent: 1e-3
-          lv_previous = lv_offset - 1.
-          IF lv_rest+lv_previous(1) NA 'eE'.
-            RETURN.
-          ENDIF.
-      ENDCASE.
-    ENDDO.
-    IF lv_dots > 1 OR lv_exponents > 1.
-      RETURN.
-    ENDIF.
-    lv_offset = lv_length - 1.
-    IF lv_rest+lv_offset(1) NA '0123456789'.
-      RETURN.
-    ENDIF.
-    rv_number = abap_true.
+    rv_number = lcl_graph_conv=>is_json_number( iv_value ).
   ENDMETHOD.
 
 
@@ -748,7 +702,7 @@ CLASS lcl_graph_excel IMPLEMENTATION.
     CONCATENATE lv_rest `/rows?$select=values` INTO lv_rest.
     lv_path = book_path( lv_rest ).
     lt_headers = headers( ).
-    lt_pages = mo_client->get_pages( iv_path = lv_path it_headers = lt_headers ).
+    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_items = iv_max it_headers = lt_headers ).
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.
@@ -924,6 +878,12 @@ CLASS ltc_graph_excel IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = lv_value exp = `Amount` ).
     lv_value = cell( it_rows = lt_rows iv_row = 2 iv_column = 2 ).
     cl_aunit_assert=>assert_equals( act = lv_value exp = `1234.5` ).
+    " Blanks inside a cell stay
+    lt_rows = lcl_graph_excel=>rows_from_text( ` ACME  LTD ;="A  B" ` ).
+    lv_value = cell( it_rows = lt_rows iv_row = 1 iv_column = 1 ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `ACME  LTD` ).
+    lv_value = cell( it_rows = lt_rows iv_row = 1 iv_column = 2 ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `="A  B"` ).
   ENDMETHOD.
 
 

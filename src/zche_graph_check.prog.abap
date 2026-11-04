@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CHECK: test the connection from SAP to Microsoft Graph
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: first the include ZCHE_GRAPH_CORE, then SE38, create
@@ -329,5 +329,5 @@ START-OF-SELECTION.
   gs_config-login_destination = p_login.
   gs_config-api_destination = p_api.
   gv_path = p_path.
-  CONDENSE gv_path.
+  gv_path = lcl_graph_conv=>trim( gv_path ).
   lcl_check=>run( is_config = gs_config iv_path = gv_path ).

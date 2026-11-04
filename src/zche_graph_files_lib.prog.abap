@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_FILES_LIB: SharePoint and OneDrive files through
 *& Microsoft Graph (INCLUDE)
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_FILES_LIB with type "Include
@@ -575,7 +575,7 @@ CLASS lcl_graph_files IMPLEMENTATION.
     ENDIF.
     CONCATENATE `/children?$top=200&$select=` select_fields INTO lv_rest.
     lv_path = item_path( iv_path = iv_folder iv_rest = lv_rest ).
-    lt_pages = mo_client->get_pages( iv_path = lv_path ).
+    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_items = iv_max ).
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.

@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL: Excel workbooks in SharePoint or OneDrive through
 *& Microsoft Graph
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE, ZCHE_GRAPH_FILES_LIB and
@@ -219,7 +219,7 @@ CLASS lcl_app IMPLEMENTATION.
     DATA lv_number TYPE string.
 
     lv_sheet = p_sheet.
-    CONDENSE lv_sheet.
+    lv_sheet = lcl_graph_conv=>trim( lv_sheet ).
     lv_address = p_addr.
     CONDENSE lv_address NO-GAPS.
     lv_table = p_table.
@@ -308,9 +308,9 @@ START-OF-SELECTION.
         gv_host = p_host.
         CONDENSE gv_host.
         gv_site = p_site.
-        CONDENSE gv_site.
+        gv_site = lcl_graph_conv=>trim( gv_site ).
         gv_lib = p_lib.
-        CONDENSE gv_lib.
+        gv_lib = lcl_graph_conv=>trim( gv_lib ).
         go_files = lcl_graph_files=>for_site( io_client  = go_client
                                               iv_host    = gv_host
                                               iv_site    = gv_site
@@ -321,7 +321,7 @@ START-OF-SELECTION.
         go_files = lcl_graph_files=>for_user( io_client = go_client iv_user = gv_text ).
       ENDIF.
       gv_path = p_path.
-      CONDENSE gv_path.
+      gv_path = lcl_graph_conv=>trim( gv_path ).
       go_excel = lcl_graph_excel=>for_file( io_client = go_client io_files = go_files iv_path = gv_path ).
       lcl_app=>run( go_excel ).
     CATCH lcx_graph INTO gx_graph.

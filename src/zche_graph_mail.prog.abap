@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL: send and read e-mail through Microsoft Graph
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_MAIL_LIB first,
@@ -317,7 +317,7 @@ START-OF-SELECTION.
     lcl_app=>send( io_mail = go_mail is_mail = gs_mail iv_spool = p_spool ).
   ELSE.
     gv_folder = p_folder.
-    CONDENSE gv_folder.
+    gv_folder = lcl_graph_conv=>trim( gv_folder ).
     lcl_app=>read( io_mail        = go_mail
                    iv_folder      = gv_folder
                    iv_unread_only = p_unread

@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL_LIB: e-mail through Microsoft Graph (INCLUDE)
-*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_MAIL_LIB with type "Include
@@ -679,7 +679,6 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     DATA lv_folder TYPE string.
     DATA lv_top TYPE i.
     DATA lv_top_text TYPE string.
-    DATA lv_pages TYPE i.
     DATA lv_count TYPE i.
     DATA lv_index TYPE i.
     DATA lv_prefix TYPE string.
@@ -695,7 +694,6 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     IF lv_top > 100.
       lv_top = 100.
     ENDIF.
-    lv_pages = ( iv_max + lv_top - 1 ) DIV lv_top.
     lv_top_text = lcl_graph_conv=>num( lv_top ).
     lv_folder = lcl_graph_conv=>url_encode( iv_folder ).
     CONCATENATE `/mailFolders/` lv_folder `/messages`
@@ -705,7 +703,7 @@ CLASS lcl_graph_mail IMPLEMENTATION.
       CONCATENATE lv_path `&$filter=isRead%20eq%20false` INTO lv_path.
     ENDIF.
     lv_path = path( lv_path ).
-    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_pages = lv_pages ).
+    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_items = iv_max ).
 
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
