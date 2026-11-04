@@ -231,7 +231,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
   METHOD user_path.
     DATA lv_user TYPE string.
     lv_user = iv_user.
-    CONDENSE lv_user.
+    lv_user = lcl_graph_conv=>trim( lv_user ).
     lv_user = lcl_graph_conv=>url_encode( lv_user ).
     CONCATENATE `/users/` lv_user iv_rest INTO rv_path.
   ENDMETHOD.
@@ -240,7 +240,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
   METHOD quote.
     " A value in an OData filter: in single quotes, a quote inside doubled
     rv_text = iv_value.
-    CONDENSE rv_text.
+    rv_text = lcl_graph_conv=>trim( rv_text ).
     REPLACE ALL OCCURRENCES OF `'` IN rv_text WITH `''`.
     CONCATENATE `'` rv_text `'` INTO rv_text.
   ENDMETHOD.
@@ -322,8 +322,8 @@ CLASS lcl_graph_users IMPLEMENTATION.
       RETURN.
     ENDIF.
     " 999 users per page
-    lv_max_pages = iv_max DIV 999 + 1.
-    lt_pages = mo_client->get_pages( iv_path = iv_path iv_max_pages = lv_max_pages ).
+    lv_max_pages = iv_max DIV 999 + 2.
+    lt_pages = mo_client->get_pages( iv_path = iv_path iv_max_pages = lv_max_pages iv_max_items = iv_max ).
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.
@@ -489,7 +489,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
     DATA lv_guid TYPE abap_bool.
 
     lv_group = iv_group.
-    CONDENSE lv_group.
+    lv_group = lcl_graph_conv=>trim( lv_group ).
     lv_guid = is_guid( lv_group ).
     IF lv_guid = abap_true.
       CONCATENATE `/groups/` lv_group `?$select=id,displayName,mail` INTO lv_path.

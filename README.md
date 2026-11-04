@@ -20,7 +20,7 @@ SAP program ──INCLUDE zche_graph_core──┐
 
 1. The application signs in with the **OAuth2 client credentials** flow. The client ID and secret travel as HTTP basic authentication from SM59 destination `ZCHE_GRAPH_LOGIN`; Microsoft accepts this (`client_secret_basic`). The token is kept until five minutes before it expires.
 2. Calls go through SM59 destination `ZCHE_GRAPH_API` with that token.
-3. HTTP 429, 503 and 504 are retried after the time Microsoft asks for (`Retry-After`, at most 60 seconds). HTTP 401 gets one new token. Other errors raise `LCX_GRAPH` with Microsoft's error code, message, `request-id` and a hint on what to check.
+3. HTTP 429 is retried after the time Microsoft asks for (`Retry-After`, at most 60 seconds). HTTP 503 and 504 are retried the same way for GET, PUT and DELETE only: a POST or PATCH (sending a mail, creating an item) may have been carried out before the error, so it is not sent again, and the error says that the outcome is unknown. HTTP 401 gets one new token. Other errors raise `LCX_GRAPH` with Microsoft's error code, message, `request-id` and a hint on what to check.
 
 ## What you need
 
@@ -326,7 +326,7 @@ A SharePoint list is a table that people keep in SharePoint: open invoices, a su
 - **The lists of a site, and the columns of a list:** internal name, name shown, type (text, number, currency, date, yes/no, choice, lookup, person, …), required, read-only, multiple values.
 - **Read items:** all columns or chosen ones, with an OData filter such as `fields/Status eq 'Open'`, over many pages.
 - **Create, change and delete items.** Only the fields you give are changed.
-- **Update or create by a key column (`upsert`):** for example "update the item whose `InvoiceNo` is 4711, or create it". This is the basic step to mirror SAP data into a list every night.
+- **Update or create by a key column (`upsert`):** for example "update the item whose `InvoiceNo` is 4711, or create it". This is the basic step to mirror SAP data into a list every night. Two jobs that run at the same time could both find nothing and both create the item; to prevent that, switch on **Enforce unique values** for the key column in SharePoint. The second create is then refused, and the module updates the item the other job created.
 
 Values travel as text. Each value is converted by the type of its column:
 
@@ -640,7 +640,7 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 ![The test mail, read back from SAP](docs/img/mail-read.png)
 
 - **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled, as for every shared mailbox; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial have no e-mail address in SU01. The comparison itself is covered only by a unit test.
-- **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times.
+- **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times. Run again with the same key, it got the same event back; the calendar still had one.
 
 Found on the tenant and fixed in 0.5.1:
 
@@ -705,11 +705,11 @@ Found on the tenant and fixed in 0.5.1:
 
 - **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
-- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees, all-day events, changing, cancelling and deleting, and a repeated key.
+- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees, all-day events, changing, cancelling and deleting.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
 - **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.
-- **SharePoint lists against Microsoft:** lookup columns, deleting items.
+- **SharePoint lists against Microsoft:** lookup columns, deleting items, two jobs creating the same key at the same time (only a unit test with a made-up answer).
 - **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:
   - the SM59 user and password fields take a 36-character client ID and a 40-character secret;

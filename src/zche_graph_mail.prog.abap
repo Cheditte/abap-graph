@@ -317,7 +317,7 @@ START-OF-SELECTION.
     lcl_app=>send( io_mail = go_mail is_mail = gs_mail iv_spool = p_spool ).
   ELSE.
     gv_folder = p_folder.
-    CONDENSE gv_folder.
+    gv_folder = lcl_graph_conv=>trim( gv_folder ).
     lcl_app=>read( io_mail        = go_mail
                    iv_folder      = gv_folder
                    iv_unread_only = p_unread

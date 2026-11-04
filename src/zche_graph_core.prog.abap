@@ -161,6 +161,22 @@ CLASS lcl_graph_conv DEFINITION FINAL.
       RETURNING
         value(rv_text) TYPE string.
 
+    "! A number as JSON writes it (RFC 8259): -12.5, 0, 1e-3, 2E+6.
+    "! Not: 00123, +5, 1., .5, 1e, 1..2, 1 2, 1.234,50
+    CLASS-METHODS is_json_number
+      IMPORTING
+        iv_text          TYPE string
+      RETURNING
+        value(rv_number) TYPE abap_bool.
+
+    "! Blanks at the start and the end go; blanks inside stay as they are
+    "! (CONDENSE would turn "a  b" into "a b", another file or value)
+    CLASS-METHODS trim
+      IMPORTING
+        iv_text        TYPE string
+      RETURNING
+        value(rv_text) TYPE string.
+
     "! "/Reports\2026/" -> "Reports/2026": backslashes become slashes, no slash at either end
     CLASS-METHODS clean_path
       IMPORTING
@@ -229,13 +245,108 @@ CLASS lcl_graph_conv IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD is_json_number.
+    " States: 0 start, 1 after -, 2 after a leading 0, 3 in the integer digits,
+    " 4 after the dot, 5 in the fraction, 6 after e, 7 after the sign of e,
+    " 8 in the exponent. The number is complete in 2, 3, 5 and 8.
+    DATA lv_length TYPE i.
+    DATA lv_offset TYPE i.
+    DATA lv_char TYPE c LENGTH 1.
+    DATA lv_state TYPE i.
+    DATA lv_digit TYPE abap_bool.
+
+    rv_number = abap_false.
+    lv_length = strlen( iv_text ).
+    IF lv_length = 0.
+      RETURN.
+    ENDIF.
+    DO lv_length TIMES.
+      lv_offset = sy-index - 1.
+      lv_char = iv_text+lv_offset(1).
+      IF lv_char CA '0123456789' AND lv_char <> space.
+        lv_digit = abap_true.
+      ELSE.
+        lv_digit = abap_false.
+      ENDIF.
+      CASE lv_state.
+        WHEN 0 OR 1.
+          IF lv_char = '-' AND lv_state = 0.
+            lv_state = 1.
+          ELSEIF lv_char = '0'.
+            lv_state = 2.
+          ELSEIF lv_digit = abap_true.
+            lv_state = 3.
+          ELSE.
+            RETURN.
+          ENDIF.
+        WHEN 2 OR 3.
+          IF lv_digit = abap_true AND lv_state = 3.
+            lv_state = 3.
+          ELSEIF lv_char = '.'.
+            lv_state = 4.
+          ELSEIF lv_char = 'e' OR lv_char = 'E'.
+            lv_state = 6.
+          ELSE.
+            RETURN.
+          ENDIF.
+        WHEN 4 OR 5.
+          IF lv_digit = abap_true.
+            lv_state = 5.
+          ELSEIF lv_state = 5 AND ( lv_char = 'e' OR lv_char = 'E' ).
+            lv_state = 6.
+          ELSE.
+            RETURN.
+          ENDIF.
+        WHEN 6.
+          IF lv_char = '+' OR lv_char = '-'.
+            lv_state = 7.
+          ELSEIF lv_digit = abap_true.
+            lv_state = 8.
+          ELSE.
+            RETURN.
+          ENDIF.
+        WHEN 7 OR 8.
+          IF lv_digit = abap_true.
+            lv_state = 8.
+          ELSE.
+            RETURN.
+          ENDIF.
+      ENDCASE.
+    ENDDO.
+    IF lv_state = 2 OR lv_state = 3 OR lv_state = 5 OR lv_state = 8.
+      rv_number = abap_true.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD trim.
+    DATA lv_length TYPE i.
+    DATA lv_last TYPE i.
+
+    rv_text = iv_text.
+    SHIFT rv_text LEFT DELETING LEADING space.
+    DO.
+      lv_length = strlen( rv_text ).
+      IF lv_length = 0.
+        EXIT.
+      ENDIF.
+      lv_last = lv_length - 1.
+      " A string literal: the character constant SPACE would count as empty here
+      IF rv_text+lv_last(1) <> ` `.
+        EXIT.
+      ENDIF.
+      rv_text = rv_text(lv_last).
+    ENDDO.
+  ENDMETHOD.
+
+
   METHOD clean_path.
     DATA lv_length TYPE i.
     DATA lv_last TYPE i.
 
     rv_path = iv_path.
     TRANSLATE rv_path USING '\/'.
-    CONDENSE rv_path.
+    rv_path = trim( rv_path ).
     WHILE rv_path IS NOT INITIAL AND rv_path(1) = '/'.
       SHIFT rv_path LEFT BY 1 PLACES.
     ENDWHILE.
@@ -667,8 +778,10 @@ CLASS lcl_graph_json IMPLEMENTATION.
           lv_piece = lv_cr.
         WHEN 't'.
           lv_piece = cl_abap_char_utilities=>horizontal_tab.
-        WHEN 'b' OR 'f'.
-          CLEAR lv_piece.
+        WHEN 'b'.
+          lv_piece = unicode_char( `0008` ).
+        WHEN 'f'.
+          lv_piece = unicode_char( `000C` ).
         WHEN 'u'.
           IF mv_position + 4 > mv_length.
             syntax_error( `incomplete \u escape` ).
@@ -861,6 +974,9 @@ CLASS lcl_graph_json_writer DEFINITION FINAL.
         value(rv_json) TYPE string.
 
   PRIVATE SECTION.
+    " U+0000 to U+001F; JSON allows none of them as they are
+    CLASS-DATA gv_controls TYPE string.
+
     DATA mv_json TYPE string.
     " One line per open object or array: X when it has no member yet
     DATA mt_first TYPE STANDARD TABLE OF abap_bool WITH DEFAULT KEY.
@@ -874,13 +990,31 @@ ENDCLASS.
 CLASS lcl_graph_json_writer IMPLEMENTATION.
 
   METHOD escape.
+    CONSTANTS lc_hex TYPE c LENGTH 16 VALUE '0123456789abcdef'.
     DATA lv_length TYPE i.
     DATA lv_offset TYPE i.
     DATA lv_char TYPE c LENGTH 1.
     DATA lv_piece TYPE string.
     DATA lv_cr TYPE c LENGTH 1.
     DATA lv_crlf TYPE c LENGTH 2.
+    DATA lv_code TYPE c LENGTH 4.
+    DATA lv_control TYPE c LENGTH 1.
+    DATA lv_position TYPE i.
+    DATA lv_high TYPE i.
+    DATA lv_low TYPE i.
 
+    IF gv_controls IS INITIAL.
+      DO 32 TIMES.
+        lv_position = sy-index - 1.
+        lv_high = lv_position DIV 16.
+        lv_low = lv_position MOD 16.
+        CONCATENATE '00' lc_hex+lv_high(1) lc_hex+lv_low(1) INTO lv_code.
+        " UCCP reads upper case hex only
+        TRANSLATE lv_code TO UPPER CASE.
+        lv_control = cl_abap_conv_in_ce=>uccp( lv_code ).
+        CONCATENATE gv_controls lv_control INTO gv_controls.
+      ENDDO.
+    ENDIF.
     " Carriage return: the first character of CR/LF
     lv_crlf = cl_abap_char_utilities=>cr_lf.
     lv_cr = lv_crlf(1).
@@ -903,6 +1037,13 @@ CLASS lcl_graph_json_writer IMPLEMENTATION.
           lv_piece = ` `.
         WHEN OTHERS.
           lv_piece = lv_char.
+          " Other control characters (backspace, form feed, U+0001 ...) as \u00XX
+          FIND lv_char IN gv_controls MATCH OFFSET lv_position.
+          IF sy-subrc = 0.
+            lv_high = lv_position DIV 16.
+            lv_low = lv_position MOD 16.
+            CONCATENATE `\u00` lc_hex+lv_high(1) lc_hex+lv_low(1) INTO lv_piece.
+          ENDIF.
       ENDCASE.
       CONCATENATE rv_json lv_piece INTO rv_json.
     ENDDO.
@@ -1428,8 +1569,10 @@ ENDCLASS.
 * Microsoft Graph calls. Paths are relative to the API version, for
 * example /users/someone@contoso.com/sendMail; a path that starts with
 * /v1.0/ or /beta/ is used as it is.
-* - HTTP 429, 503 and 504 are retried after the time Microsoft asks for
-*   (header Retry-After, at most 60 seconds), up to MAX_RETRIES times.
+* - HTTP 429 is retried after the time Microsoft asks for (header
+*   Retry-After, at most 60 seconds), up to MAX_RETRIES times. HTTP 503
+*   and 504 too, but only for GET, PUT and DELETE: a POST or PATCH may
+*   have been carried out, so it is not sent a second time.
 * - HTTP 401 gets one new token and one more try.
 * - Other answers from 400 on raise LCX_GRAPH with Microsoft's error
 *   code, message, request ID and a hint.
@@ -1473,11 +1616,16 @@ CLASS lcl_graph_client DEFINITION FINAL.
       RAISING
         lcx_graph.
 
-    "! GET and follow @odata.nextLink; one entry per page
+    "! GET and follow @odata.nextLink; one entry per page.
+    "! IV_MAX_ITEMS: stop once the pages hold that many entries in "value"
+    "! (0: no limit). IV_MAX_PAGES guards against endless paging: when
+    "! Microsoft still has more after that many pages, LCX_GRAPH is raised
+    "! rather than returning part of the result as if it were all.
     METHODS get_pages
       IMPORTING
         iv_path         TYPE string
         iv_max_pages    TYPE i DEFAULT 100
+        iv_max_items    TYPE i DEFAULT 0
         it_headers      TYPE tihttpnvp OPTIONAL
       RETURNING
         value(rt_pages) TYPE ty_pages
@@ -1645,8 +1793,13 @@ CLASS lcl_graph_client IMPLEMENTATION.
         lv_renewed = abap_true.
         CONTINUE.
       ENDIF.
-      IF ( rs_response-status = 429 OR rs_response-status = 503 OR rs_response-status = 504 )
-          AND lv_attempt < ms_config-max_retries.
+      " 429: Microsoft did not carry the request out, so any request may go again.
+      " 503/504: it may have been carried out; only requests that do the same
+      " when repeated go again, not POST or PATCH (a second mail, a second item)
+      IF lv_attempt < ms_config-max_retries
+         AND ( rs_response-status = 429
+            OR ( ( rs_response-status = 503 OR rs_response-status = 504 )
+             AND ( iv_method = 'GET' OR iv_method = 'PUT' OR iv_method = 'DELETE' ) ) ).
         lv_attempt = lv_attempt + 1.
         lv_seconds = wait_seconds( is_response = rs_response iv_attempt = lv_attempt ).
         IF lv_seconds > 0.
@@ -1730,8 +1883,14 @@ CLASS lcl_graph_client IMPLEMENTATION.
         lv_hint = `The application lacks a permission for this call, admin consent is missing, or the mailbox or site is not in the allowed scope. Check the API permissions of the app registration.`.
       WHEN 404.
         lv_hint = `Not found: check the user, mailbox, site or item in the path.`.
-      WHEN 429 OR 503 OR 504.
+      WHEN 429.
         lv_hint = `Microsoft is busy or limiting requests; the call was retried. Run it again later or with smaller amounts.`.
+      WHEN 503 OR 504.
+        IF iv_method = 'POST' OR iv_method = 'PATCH'.
+          lv_hint = `The outcome is unknown: Microsoft may have carried the request out. Check (for a mail: Sent Items; for a list or table: its items) before you run it again.`.
+        ELSE.
+          lv_hint = `Microsoft is busy; the call was retried. Run it again later.`.
+        ENDIF.
     ENDCASE.
 
     lv_status = lcl_graph_conv=>num( is_response-status ).
@@ -1762,6 +1921,10 @@ CLASS lcl_graph_client IMPLEMENTATION.
     DATA lo_page TYPE REF TO lcl_graph_json.
     DATA lv_path TYPE string.
     DATA lv_next TYPE string.
+    DATA lv_items TYPE i.
+    DATA lv_count TYPE i.
+    DATA lv_number TYPE string.
+    DATA lv_text TYPE string.
 
     lv_path = iv_path.
     DO iv_max_pages TIMES.
@@ -1769,10 +1932,22 @@ CLASS lcl_graph_client IMPLEMENTATION.
       APPEND lo_page TO rt_pages.
       lv_next = lo_page->get( `@odata.nextLink` ).
       IF lv_next IS INITIAL.
-        EXIT.
+        RETURN.
+      ENDIF.
+      " Enough entries: the next page is not asked for
+      lv_count = lo_page->count( `value` ).
+      lv_items = lv_items + lv_count.
+      IF iv_max_items > 0 AND lv_items >= iv_max_items.
+        RETURN.
       ENDIF.
       lv_path = path_of_url( lv_next ).
     ENDDO.
+    lv_number = lcl_graph_conv=>num( iv_max_pages ).
+    CONCATENATE `Microsoft Graph has more than ` lv_number ` pages for ` iv_path `; the result would not be complete.` INTO lv_text.
+    RAISE EXCEPTION TYPE lcx_graph
+      EXPORTING
+        text = lv_text
+        hint = `Narrow the request (a filter, a folder) or ask for fewer entries.`.
   ENDMETHOD.
 
 
@@ -1989,6 +2164,8 @@ CLASS ltc_graph_json DEFINITION FINAL FOR TESTING.
     METHODS invalid_json FOR TESTING.
     METHODS writer FOR TESTING.
     METHODS writer_escapes FOR TESTING.
+    METHODS control_characters FOR TESTING RAISING lcx_graph.
+    METHODS json_numbers FOR TESTING.
 ENDCLASS.
 
 
@@ -2132,6 +2309,62 @@ CLASS ltc_graph_json IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD control_characters.
+    " Written and read back unchanged; nothing raw below U+0020 in the JSON
+    DATA lo_writer TYPE REF TO lcl_graph_json_writer.
+    DATA lo_json TYPE REF TO lcl_graph_json.
+    DATA lv_text TYPE string.
+    DATA lv_json TYPE string.
+    DATA lv_value TYPE string.
+    DATA lv_char TYPE c LENGTH 1.
+    DATA lv_code TYPE c LENGTH 4.
+    DATA lv_length TYPE i.
+
+    lv_text = `Şirket "A" \ `.
+    lv_code = '0008'.
+    lv_char = cl_abap_conv_in_ce=>uccp( lv_code ).
+    CONCATENATE lv_text lv_char INTO lv_text.
+    lv_code = '000C'.
+    lv_char = cl_abap_conv_in_ce=>uccp( lv_code ).
+    CONCATENATE lv_text lv_char `x` INTO lv_text.
+    lv_code = '0001'.
+    lv_char = cl_abap_conv_in_ce=>uccp( lv_code ).
+    CONCATENATE lv_text lv_char cl_abap_char_utilities=>horizontal_tab `ğ` INTO lv_text.
+
+    CREATE OBJECT lo_writer.
+    lo_writer->begin_object( ).
+    lo_writer->add_string( iv_name = `v` iv_value = lv_text ).
+    lo_writer->end_object( ).
+    lv_json = lo_writer->result( ).
+    cl_aunit_assert=>assert_equals( act = lv_json exp = `{"v":"Şirket \"A\" \\ \u0008\u000cx\u0001\tğ"}` ).
+    lo_json = lcl_graph_json=>parse( lv_json ).
+    lv_value = lo_json->get( `v` ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = lv_text ).
+    lo_json = lcl_graph_json=>parse( `{"v":"a\bb\fc"}` ).
+    lv_value = lo_json->get( `v` ).
+    lv_length = strlen( lv_value ).
+    cl_aunit_assert=>assert_equals( act = lv_length exp = 5 ).
+  ENDMETHOD.
+
+
+  METHOD json_numbers.
+    DATA lt_texts TYPE lcl_graph_json=>ty_names.
+    DATA lv_text TYPE string.
+    DATA lv_number TYPE abap_bool.
+
+    SPLIT `0,-12.5,1e-3,2E+6,1234.50,-0.5` AT ',' INTO TABLE lt_texts.
+    LOOP AT lt_texts INTO lv_text.
+      lv_number = lcl_graph_conv=>is_json_number( lv_text ).
+      cl_aunit_assert=>assert_equals( act = lv_number exp = abap_true msg = lv_text ).
+    ENDLOOP.
+    SPLIT `00123;+1;--1;1e;1..2;1e.2;1e2.3;1.;.5;-;1 2;1.234,50;2026-11-02;0x1` AT ';' INTO TABLE lt_texts.
+    LOOP AT lt_texts INTO lv_text.
+      lv_number = lcl_graph_conv=>is_json_number( lv_text ).
+      cl_aunit_assert=>assert_equals( act = lv_number exp = abap_false msg = lv_text ).
+    ENDLOOP.
+  ENDMETHOD.
+
+
   METHOD writer_escapes.
     DATA lv_text TYPE string.
     DATA lv_json TYPE string.
@@ -2157,8 +2390,12 @@ CLASS ltc_graph_client DEFINITION FINAL FOR TESTING.
     METHODS token_error_hint FOR TESTING.
     METHODS graph_error FOR TESTING.
     METHODS retry_after_429 FOR TESTING RAISING lcx_graph.
+    METHODS retry_get_after_503 FOR TESTING RAISING lcx_graph.
+    METHODS no_retry_post_after_504 FOR TESTING.
     METHODS new_token_after_401 FOR TESTING RAISING lcx_graph.
     METHODS paging FOR TESTING RAISING lcx_graph.
+    METHODS paging_stops_early FOR TESTING RAISING lcx_graph.
+    METHODS paging_limit FOR TESTING.
     METHODS paths FOR TESTING.
     METHODS roles_in_token FOR TESTING.
 
@@ -2291,6 +2528,36 @@ CLASS ltc_graph_client IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD retry_get_after_503.
+    DATA lv_count TYPE i.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 503 iv_retry_after = `0` ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    mo_cut->get_json( `/users` ).
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 3 ).
+  ENDMETHOD.
+
+
+  METHOD no_retry_post_after_504.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_count TYPE i.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 504 iv_retry_after = `0` ).
+    mo_http->answer( iv_status = 202 ).
+    TRY.
+        mo_cut->send_json( iv_method = 'POST' iv_path = `/users/sap@contoso.com/sendMail` iv_json = `{}` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->http_status exp = 504 ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->hint exp = '*outcome is unknown*' ).
+    " The token request and one POST; the mail was not sent a second time
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
+  ENDMETHOD.
+
+
   METHOD new_token_after_401.
     DATA ls_request TYPE ltd_graph_http=>ty_request.
     DATA lv_auth TYPE string.
@@ -2302,6 +2569,35 @@ CLASS ltc_graph_client IMPLEMENTATION.
     ls_request = request_at( 4 ).
     lv_auth = lcl_graph_client=>header_value( it_headers = ls_request-headers iv_name = `authorization` ).
     cl_aunit_assert=>assert_equals( act = lv_auth exp = `Bearer TOKEN2` ).
+  ENDMETHOD.
+
+
+  METHOD paging_stops_early.
+    DATA lt_pages TYPE lcl_graph_client=>ty_pages.
+    DATA lv_count TYPE i.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 200
+                     iv_body = `{"value":[{"id":"1"},{"id":"2"}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/users?$skiptoken=X1"}` ).
+    lt_pages = mo_cut->get_pages( iv_path = `/users` iv_max_items = 2 ).
+    lv_count = lines( lt_pages ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+    " The token and one page; the second page was not asked for
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
+  ENDMETHOD.
+
+
+  METHOD paging_limit.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 200
+                     iv_body = `{"value":[{"id":"1"}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/users?$skiptoken=X1"}` ).
+    TRY.
+        mo_cut->get_pages( iv_path = `/users` iv_max_pages = 1 ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `a cut result was returned as complete` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*more than 1 pages*not be complete*' ).
   ENDMETHOD.
 
 
@@ -2325,6 +2621,9 @@ CLASS ltc_graph_client IMPLEMENTATION.
     DATA lv_path TYPE string.
     lv_path = lcl_graph_client=>path_of_url( `https://graph.microsoft.com/beta/me?$top=1` ).
     cl_aunit_assert=>assert_equals( act = lv_path exp = `/beta/me?$top=1` ).
+    " Two blanks inside a name are another file than one blank
+    lv_path = lcl_graph_conv=>clean_path( ` \Raporlar\a  b.pdf ` ).
+    cl_aunit_assert=>assert_equals( act = lv_path exp = `Raporlar/a  b.pdf` ).
   ENDMETHOD.
 
 

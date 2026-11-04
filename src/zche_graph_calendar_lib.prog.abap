@@ -480,8 +480,8 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
       INTO lv_rest.
     lv_path = path( lv_rest ).
     lt_headers = utc_headers( ).
-    lv_max_pages = iv_max DIV 100 + 1.
-    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_pages = lv_max_pages it_headers = lt_headers ).
+    lv_max_pages = iv_max DIV 100 + 2.
+    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_pages = lv_max_pages iv_max_items = iv_max it_headers = lt_headers ).
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.

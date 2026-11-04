@@ -228,9 +228,9 @@ CLASS lcl_app IMPLEMENTATION.
     lv_host = p_host.
     CONDENSE lv_host.
     lv_site = p_site.
-    CONDENSE lv_site.
+    lv_site = lcl_graph_conv=>trim( lv_site ).
     lv_list = p_list.
-    CONDENSE lv_list.
+    lv_list = lcl_graph_conv=>trim( lv_list ).
 
     IF r_lists = abap_true.
       lv_site_id = lcl_graph_site=>id( io_client = io_client iv_host = lv_host iv_site = lv_site ).
@@ -272,7 +272,7 @@ CLASS lcl_app IMPLEMENTATION.
         SPLIT lv_select AT ',' INTO TABLE lt_select.
       ENDIF.
       lv_filter = p_filter.
-      CONDENSE lv_filter.
+      lv_filter = lcl_graph_conv=>trim( lv_filter ).
       lt_items = lo_list->items( it_select = lt_select iv_filter = lv_filter iv_max = p_max ).
       lv_lines = lines( lt_items ).
       lv_number = lcl_graph_conv=>num( lv_lines ).

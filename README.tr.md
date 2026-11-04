@@ -31,7 +31,8 @@ SAP programı ──INCLUDE zche_graph_core──┐
    - Token, süresinin dolmasına beş dakika kalana kadar saklanır.
 2. **Çağrılar:** SM59 hedefi `ZCHE_GRAPH_API` üzerinden, bu token'la yapılır.
 3. **Hatalar:**
-   - HTTP 429, 503 ve 504'te Microsoft'un istediği süre beklenip yeniden denenir (`Retry-After`, en fazla 60 saniye).
+   - HTTP 429'da Microsoft'un istediği süre beklenip yeniden denenir (`Retry-After`, en fazla 60 saniye).
+   - HTTP 503 ve 504'te aynısı yalnız GET, PUT ve DELETE için yapılır. POST ya da PATCH (e-posta gönderme, kayıt oluşturma) hatadan önce yerine getirilmiş olabilir; bu yüzden tekrar gönderilmez ve hata, sonucun belirsiz olduğunu söyler.
    - HTTP 401'de bir kez yeni token alınır.
    - Diğer hatalarda `LCX_GRAPH` fırlatılır. İçinde Microsoft'un hata kodu, mesajı, `request-id` ve neyin kontrol edileceğine dair bir ipucu vardır.
 
@@ -357,7 +358,7 @@ Modülün iki nesnesi var: `ZCHE_GRAPH_LISTS_LIB` include'u (sınıf `LCL_GRAPH_
 - **Sitenin listeleri ve bir listenin sütunları:** iç ad, görünen ad, tür (metin, sayı, para, tarih, evet/hayır, seçim, arama, kişi, …), zorunlu, salt okunur, çoklu değer.
 - **Kayıt okuma:** tüm sütunlar ya da seçilenler, `fields/Status eq 'Open'` gibi bir OData filtresiyle, birden çok sayfa boyunca.
 - **Kayıt oluşturma, değiştirme ve silme.** Yalnızca verdiğiniz alanlar değişir.
-- **Anahtar sütuna göre güncelle ya da oluştur (`upsert`):** örneğin "`InvoiceNo`'su 4711 olan kaydı güncelle, yoksa oluştur". SAP verisini her gece bir listeye yansıtmanın temel adımı bu.
+- **Anahtar sütuna göre güncelle ya da oluştur (`upsert`):** örneğin "`InvoiceNo`'su 4711 olan kaydı güncelle, yoksa oluştur". SAP verisini her gece bir listeye yansıtmanın temel adımı bu. Aynı anda çalışan iki iş ikisi de kaydı bulamayıp ikisi de oluşturabilir. Bunu önlemek için SharePoint'te anahtar sütunda **Benzersiz değerler zorunlu** (Enforce unique values) ayarını açın. İkinci oluşturma o zaman reddedilir ve modül diğer işin oluşturduğu kaydı günceller.
 
 Değerler metin olarak taşınır ve sütunun türüne göre çevrilir:
 
@@ -677,7 +678,7 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 ![Test e-postası, SAP'den geri okunurken](docs/img/mail-read.png)
 
 - **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı, her paylaşılan kutuda olduğu gibi; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yok. Karşılaştırmanın kendisi yalnız birim testiyle sınandı.
-- **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi.
+- **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi. Aynı anahtarla tekrar çalıştırılınca aynı etkinlik döndü; takvimde yine tek etkinlik vardı.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
@@ -741,11 +742,11 @@ Tenant'ta bulunup 0.5.1'de düzeltilenler:
 **Henüz doğrulanmadı:**
 - **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
-- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı ve tüm gün etkinlikler, değiştirme, iptal, silme ve tekrarlanan anahtar.
+- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı ve tüm gün etkinlikler, değiştirme, iptal ve silme.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
 - **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.
-- **SharePoint listelerinin Microsoft'ta denenmesi:** arama (lookup) sütunları, kayıt silme.
+- **SharePoint listelerinin Microsoft'ta denenmesi:** arama (lookup) sütunları, kayıt silme, aynı anahtarı aynı anda oluşturan iki iş (yalnız uydurma cevaplı bir birim testi var).
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:
   - SM59'un kullanıcı ve şifre alanlarının 36 karakterlik client ID'yi ve 40 karakterlik secret'ı alıp almadığı;

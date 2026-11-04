@@ -355,12 +355,12 @@ CLASS lcl_app IMPLEMENTATION.
 
     IF r_user = abap_true.
       lv_value = p_user.
-      CONDENSE lv_value.
+      lv_value = lcl_graph_conv=>trim( lv_value ).
       show_user( io_users = lo_users iv_user = lv_value ).
 
     ELSEIF r_find = abap_true.
       lv_value = p_filter.
-      CONDENSE lv_value.
+      lv_value = lcl_graph_conv=>trim( lv_value ).
       lt_users = lo_users->find( iv_filter = lv_value iv_max = p_max ).
       lv_count = lines( lt_users ).
       heading( iv_en = `Users` iv_tr = `Kullanıcılar` iv_count = lv_count ).
@@ -368,7 +368,7 @@ CLASS lcl_app IMPLEMENTATION.
 
     ELSEIF r_group = abap_true.
       lv_value = p_group.
-      CONDENSE lv_value.
+      lv_value = lcl_graph_conv=>trim( lv_value ).
       lt_users = lo_users->members( iv_group = lv_value iv_nested = p_nested ).
       lv_count = lines( lt_users ).
       heading( iv_en = `Members` iv_tr = `Üyeler` iv_count = lv_count ).

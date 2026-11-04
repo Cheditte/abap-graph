@@ -329,5 +329,5 @@ START-OF-SELECTION.
   gs_config-login_destination = p_login.
   gs_config-api_destination = p_api.
   gv_path = p_path.
-  CONDENSE gv_path.
+  gv_path = lcl_graph_conv=>trim( gv_path ).
   lcl_check=>run( is_config = gs_config iv_path = gv_path ).

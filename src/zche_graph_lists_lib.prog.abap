@@ -56,6 +56,8 @@ INTERFACE lif_graph_lists.
       read_only    TYPE abap_bool,
       required     TYPE abap_bool,
       hidden       TYPE abap_bool,
+      " "Enforce unique values" in the column settings
+      unique       TYPE abap_bool,
     END OF ty_column,
     ty_columns TYPE STANDARD TABLE OF ty_column WITH DEFAULT KEY.
 
@@ -174,6 +176,10 @@ CLASS lcl_graph_list DEFINITION FINAL.
 
     "! Updates the item whose IV_KEY column has the value given in IT_FIELDS,
     "! or creates it. Returns the item ID; EV_CREATED = X when it was created.
+    "! Two jobs that run at the same time can both find nothing and both
+    "! create. Only SharePoint can stop that: switch on "Enforce unique
+    "! values" for the key column. Then the second create is refused, and
+    "! the item that the other job created is read and updated instead.
     METHODS upsert
       IMPORTING
         iv_key        TYPE string
@@ -309,7 +315,7 @@ CLASS lcl_graph_list IMPLEMENTATION.
     lv_site_id = lcl_graph_site=>id( io_client = io_client iv_host = iv_host iv_site = iv_site ).
     lt_lists = lists( io_client = io_client iv_site_id = lv_site_id ).
     lv_wanted = iv_list.
-    CONDENSE lv_wanted.
+    lv_wanted = lcl_graph_conv=>trim( lv_wanted ).
     TRANSLATE lv_wanted TO UPPER CASE.
     LOOP AT lt_lists INTO ls_list.
       lv_name = ls_list-name.
@@ -437,6 +443,11 @@ CLASS lcl_graph_list IMPLEMENTATION.
         IF lv_value = `true`.
           ls_column-hidden = abap_true.
         ENDIF.
+        CONCATENATE lv_prefix `enforceUniqueValues` INTO lv_field.
+        lv_value = lo_page->get( lv_field ).
+        IF lv_value = `true`.
+          ls_column-unique = abap_true.
+        ENDIF.
         ls_column-type = `other`.
         LOOP AT lt_types INTO lv_type.
           CONCATENATE lv_prefix lv_type INTO lv_field.
@@ -470,13 +481,15 @@ CLASS lcl_graph_list IMPLEMENTATION.
 
   METHOD number_json.
     DATA lv_text TYPE string.
-    rv_json = iv_value.
-    CONDENSE rv_json NO-GAPS.
+    DATA lv_number TYPE abap_bool.
+    " Blanks only at the ends: "1 2" is not 12
+    rv_json = lcl_graph_conv=>trim( iv_value ).
     IF rv_json IS INITIAL.
       rv_json = `null`.
       RETURN.
     ENDIF.
-    IF rv_json CN '0123456789.-+eE'.
+    lv_number = lcl_graph_conv=>is_json_number( rv_json ).
+    IF lv_number = abap_false.
       CONCATENATE `Field ` iv_name `: "` iv_value `" is not a number. Write numbers with a dot, for example 1234.56.` INTO lv_text.
       RAISE EXCEPTION TYPE lcx_graph
         EXPORTING
@@ -646,7 +659,7 @@ CLASS lcl_graph_list IMPLEMENTATION.
       CONCATENATE lv_path `&$filter=` lv_filter INTO lv_path.
       lt_headers = prefer_headers( ).
     ENDIF.
-    lt_pages = mo_client->get_pages( iv_path = lv_path it_headers = lt_headers ).
+    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_items = iv_max it_headers = lt_headers ).
     LOOP AT lt_pages INTO lo_page.
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.
@@ -731,6 +744,8 @@ CLASS lcl_graph_list IMPLEMENTATION.
   METHOD upsert.
     DATA lt_items TYPE lif_graph_lists=>ty_items.
     DATA ls_item TYPE lif_graph_lists=>ty_item.
+    DATA ls_column TYPE lif_graph_lists=>ty_column.
+    DATA lx_graph TYPE REF TO lcx_graph.
     DATA lt_select TYPE lcl_graph_json=>ty_names.
     DATA lv_key_value TYPE string.
     DATA lv_filter TYPE string.
@@ -761,9 +776,27 @@ CLASS lcl_graph_list IMPLEMENTATION.
       update( iv_id = ls_item-id it_fields = it_fields ).
       ev_id = ls_item-id.
     ELSE.
-      ls_item = create( it_fields ).
-      ev_id = ls_item-id.
-      ev_created = abap_true.
+      TRY.
+          ls_item = create( it_fields ).
+          ev_id = ls_item-id.
+          ev_created = abap_true.
+        CATCH lcx_graph INTO lx_graph.
+          " Refused: perhaps another job created the key in the meantime.
+          " Only a unique key column makes that certain, and only an item
+          " that is really there now counts; any other error stays an error.
+          READ TABLE mt_columns INTO ls_column WITH KEY name = iv_key.
+          IF sy-subrc <> 0 OR ls_column-unique = abap_false
+             OR ( lx_graph->http_status <> 400 AND lx_graph->http_status <> 409 ).
+            RAISE EXCEPTION lx_graph.
+          ENDIF.
+          lt_items = items( it_select = lt_select iv_filter = lv_filter iv_max = 2 ).
+          IF lines( lt_items ) <> 1.
+            RAISE EXCEPTION lx_graph.
+          ENDIF.
+          READ TABLE lt_items INDEX 1 INTO ls_item.
+          update( iv_id = ls_item-id it_fields = it_fields ).
+          ev_id = ls_item-id.
+      ENDTRY.
     ENDIF.
   ENDMETHOD.
 
@@ -792,6 +825,8 @@ CLASS ltc_graph_list DEFINITION FINAL FOR TESTING.
     METHODS wrong_number FOR TESTING.
     METHODS upsert_creates FOR TESTING RAISING lcx_graph.
     METHODS upsert_updates FOR TESTING RAISING lcx_graph.
+    METHODS upsert_race_unique FOR TESTING RAISING lcx_graph.
+    METHODS upsert_other_error FOR TESTING.
 
     METHODS answer_columns.
 
@@ -988,6 +1023,54 @@ CLASS ltc_graph_list IMPLEMENTATION.
     cl_aunit_assert=>assert_char_cp( act = ls_request-uri exp = '*$filter=fields*Title*O*Brien*' ).
     ls_request = request_at( 4 ).
     cl_aunit_assert=>assert_equals( act = ls_request-method exp = `POST` ).
+  ENDMETHOD.
+
+
+  METHOD upsert_race_unique.
+    " Nothing found, but another job creates the key before this one does
+    DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_id TYPE string.
+    DATA lv_created TYPE abap_bool.
+    DATA lv_count TYPE i.
+
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[{"name":"Title","text":{},"enforceUniqueValues":true},{"name":"Amount","number":{}}]}` ).
+    mo_http->answer( iv_status = 409 iv_body = `{"error":{"code":"conflict","message":"duplicate values were found in Title"}}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"8","fields":{"Title":"4711"}}]}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    lt_fields = lcl_graph_list=>fields_from_text( `Title=4711|Amount=5` ).
+    mo_cut->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields IMPORTING ev_id = lv_id ev_created = lv_created ).
+    cl_aunit_assert=>assert_equals( act = lv_id exp = `8` ).
+    cl_aunit_assert=>assert_equals( act = lv_created exp = abap_false ).
+    ls_request = request_at( 6 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `PATCH` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/sites/S1/lists/L1/items/8/fields` ).
+    " One item POST only (the other POST is the token): no second item
+    lv_count = 0.
+    LOOP AT mo_http->mt_requests INTO ls_request WHERE method = `POST` AND uri CP '*/items'.
+      lv_count = lv_count + 1.
+    ENDLOOP.
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+  ENDMETHOD.
+
+
+  METHOD upsert_other_error.
+    " Without a unique key column a refused create is not taken for a race
+    DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_id TYPE string.
+
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
+    answer_columns( ).
+    mo_http->answer( iv_status = 400 iv_body = `{"error":{"code":"invalidRequest","message":"Field 'Amount' is not recognized"}}` ).
+    lt_fields = lcl_graph_list=>fields_from_text( `Title=4711|Amount=5` ).
+    TRY.
+        mo_cut->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields IMPORTING ev_id = lv_id ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `the error was hidden` ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->http_status exp = 400 ).
   ENDMETHOD.
 
 

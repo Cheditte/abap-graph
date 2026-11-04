@@ -275,9 +275,9 @@ CLASS lcl_app IMPLEMENTATION.
     DATA lv_lines TYPE i.
 
     lv_path = p_path.
-    CONDENSE lv_path.
+    lv_path = lcl_graph_conv=>trim( lv_path ).
     lv_file = p_file.
-    CONDENSE lv_file.
+    lv_file = lcl_graph_conv=>trim( lv_file ).
     lv_conflict = p_confl.
     CONDENSE lv_conflict.
 
@@ -366,9 +366,9 @@ START-OF-SELECTION.
         gv_host = p_host.
         CONDENSE gv_host.
         gv_site = p_site.
-        CONDENSE gv_site.
+        gv_site = lcl_graph_conv=>trim( gv_site ).
         gv_lib = p_lib.
-        CONDENSE gv_lib.
+        gv_lib = lcl_graph_conv=>trim( gv_lib ).
         go_files = lcl_graph_files=>for_site( io_client  = go_client
                                               iv_host    = gv_host
                                               iv_site    = gv_site
