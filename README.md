@@ -5,10 +5,10 @@
 Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no middleware, no add-on. A shared core does the sign-in, the HTTP calls, JSON, retries and paging. Modules for each Microsoft product build on it: e-mail first, then SharePoint/OneDrive, Lists, Excel, Entra ID, calendar.
 
 - **Copy and paste:** you paste the source into SE38. No tables, no dictionary objects; abapGit is optional.
-- **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
+- **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.5.1, not released.** The core, the connection test and the e-mail, files, lists and Excel modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.6.0, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -253,7 +253,7 @@ Work with the files of one document library: a library of a SharePoint site, or 
 | *Or* `Sites.ReadWrite.All` / `Files.ReadWrite.All` | Simpler, but the application reaches **every** site; `Files.ReadWrite.All` also reaches every OneDrive. A user's OneDrive needs `Files.ReadWrite.All`. | Microsoft 365 administrator |
 | SAP may reach `<tenant>.sharepoint.com` with HTTPS (SICF proxy settings, STRUST) | Download URLs and the upload URLs of large files point there; no SM59 destination is used for them | Basis |
 
-**Granting a site to the application (`Sites.Selected`).** An administrator does this once per site. Two common ways; check Microsoft's current documentation, as neither has been tried with this project yet:
+**Granting a site to the application (`Sites.Selected`).** An administrator does this once per site. Two common ways; check Microsoft's current documentation. The Graph way was used once on the test tenant (`write` on one site); the PnP way was not tried.
 
 - With **PnP PowerShell**:
   ```powershell
@@ -419,7 +419,7 @@ The module consists of the include `ZCHE_GRAPH_EXCEL_LIB` (class `LCL_GRAPH_EXCE
   - clear.
 - **Excel tables** (*Insert → Table*): header, rows, add rows at the end. The table grows by itself, so formulas, pivot tables and charts that use it keep working.
 - **Recalculate** the workbook.
-- **Sessions:** keep the workbook open while you make many changes (`open_session` / `close_session`). This is faster, and the work is saved together.
+- **Sessions:** keep the workbook open while you make many changes (`open_session` / `close_session`). This is faster. It is not a transaction: when a later change fails, the earlier ones stay written.
 
 When writing, a cell that looks like a number (`1234`, `-12.5`, `1e-3`) goes as a number. A text starting with `=` is a formula. Any other text goes with a leading apostrophe, as you would type `'00123` in Excel. So `00123`, `+5` and dates like `2026-11-02` stay text, and material numbers keep their leading zeros. Excel does not show the apostrophe, and reading gives the text back without it. A row shorter than the others leaves the rest of its cells unchanged.
 
@@ -481,6 +481,119 @@ TRY.
 ENDTRY.
 ```
 
+## Entra ID users and groups
+
+Read the people of the company as Microsoft Entra ID knows them. Nothing is changed. Typical uses:
+- find the manager of a requester for an approval;
+- send a mail to the members of a group, for example "SAP approvers";
+- find SAP users who have left: their Microsoft account is disabled or gone, but the SAP user is still active.
+
+The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USERS`) and the program `ZCHE_GRAPH_USERS`.
+
+- **A user** by user principal name, e-mail address or ID: name, job title, department, office, phone, employee ID, company, and whether the account is enabled.
+- **Users by a filter**, for example `department eq 'Finance'`, `employeeId eq '00001234'` or `accountEnabled eq false`. Without a filter: all users.
+- **Manager and direct reports** of a user.
+- **Groups of a user**, and **members of a group** (by its name or ID), optionally through nested groups.
+- **SAP account check:** the active SAP dialog users (not locked, valid today) whose e-mail address in SU01 has no Microsoft account, or only a disabled one. The address is compared with the mail and the user principal name, without regard to case. Users without an address in SU01 are counted, not compared.
+
+### What the users module needs in addition
+
+| What | Why | Who |
+|---|---|---|
+| Application permission **`User.Read.All`** with admin consent | Reading users, managers, direct reports | Microsoft 365 / Entra administrator |
+| Application permission **`GroupMember.Read.All`** with admin consent | Groups and their members | Microsoft 365 / Entra administrator |
+| For the SAP account check: read access to `USR02`, `USR21` and `ADR6` | The program reads the user master directly | SAP authorization administrator |
+
+These permissions cover every user and group of the company.
+
+### Install
+
+After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_USERS_LIB` (type **Include program**) → paste [`src/zche_graph_users_lib.prog.abap`](src/zche_graph_users_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_USERS` (type **Executable program**) → paste [`src/zche_graph_users.prog.abap`](src/zche_graph_users.prog.abap) → activate.
+
+### Try it
+
+| Action | Fields |
+|---|---|
+| **Show a user** | User: address, user principal name or ID. Shows the details, the manager, the direct reports and the groups. |
+| **Find users** | Filter (empty: all) and at most how many |
+| **Members of a group** | Group name or ID; "Include nested groups" if wanted |
+| **SAP users: account check** | SAP users (empty: all dialog users) |
+
+The account check fits a monthly background job; its list goes to the spool.
+
+### Use it in your own program
+
+```abap
+DATA lo_users TYPE REF TO lcl_graph_users.
+DATA ls_manager TYPE lif_graph_users=>ty_user.
+DATA lt_members TYPE lif_graph_users=>ty_users.
+
+CREATE OBJECT lo_users EXPORTING io_client = lo_client.
+ls_manager = lo_users->manager( `derya@contoso.com` ).
+IF ls_manager IS INITIAL.
+  " No manager set in Entra ID
+ENDIF.
+lt_members = lo_users->members( iv_group = `SAP approvers` iv_nested = abap_true ).
+```
+
+## Outlook calendar
+
+Put SAP dates into Outlook calendars. Typical uses:
+- a maintenance order becomes an event in the calendar of the maintenance team;
+- a delivery or inspection date is sent as an invitation to the people involved;
+- a shared calendar (of a shared mailbox) shows the dates of an SAP process.
+
+The module consists of the include `ZCHE_GRAPH_CALENDAR_LIB` (class `LCL_GRAPH_CALENDAR`) and the program `ZCHE_GRAPH_CALENDAR`.
+
+- **Create an event** in the calendar of a user or a shared mailbox: subject, text, time or whole days, location, required and optional attendees (they get an invitation), reminder, "show as", categories.
+- **Your own key** (`transaction_id`), for example the order number: Microsoft creates an event only once per key, so running the same job twice does not make two events.
+- **List** the events of a period, with the occurrences of series one by one.
+- **Change** an event (attendees get the update), **cancel** it (attendees get the cancellation, with a comment) or **delete** it from this calendar only.
+
+Dates and times are SAP dates and times in an SAP time zone, by default the user's (`SY-ZONLO`, set in SU01). They travel to Microsoft as UTC and come back in the same SAP time zone, so summer time is handled by SAP's own time zone tables.
+
+### What the calendar module needs in addition
+
+| What | Why | Who |
+|---|---|---|
+| Application permission **`Calendars.ReadWrite`** with admin consent | Creating and reading events | Microsoft 365 / Entra administrator |
+| **Restriction to the SAP mailboxes** | Without it the application may write into **any** calendar of the company | Exchange Online administrator |
+
+Restrict it as described for the e-mail module; with RBAC for Applications the role is `Application Calendars.ReadWrite`.
+
+### Install
+
+After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_CALENDAR_LIB` (type **Include program**) → paste [`src/zche_graph_calendar_lib.prog.abap`](src/zche_graph_calendar_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_CALENDAR` (type **Executable program**) → paste [`src/zche_graph_calendar.prog.abap`](src/zche_graph_calendar.prog.abap) → activate.
+
+### Try it
+
+Run `ZCHE_GRAPH_CALENDAR` with the tenant and the mailbox whose calendar to use.
+
+| Action | Fields |
+|---|---|
+| **List events** | Date (from) and date to |
+| **Create an event** | Date, start and end time or "All day", subject; optionally location, attendees (`a@x.com; b@x.com`), text, reminder, your key |
+| **Cancel** | Event ID (from the list) and a comment |
+| **Delete from this calendar** | Event ID |
+
+### Use it in your own program
+
+```abap
+DATA lo_calendar TYPE REF TO lcl_graph_calendar.
+DATA ls_event TYPE lif_graph_calendar=>ty_event.
+
+CREATE OBJECT lo_calendar EXPORTING io_client = lo_client iv_mailbox = `maintenance@contoso.com`.
+ls_event-subject = `Maintenance: press 3`.
+ls_event-start_date = '20261110'.
+ls_event-start_time = '090000'.
+ls_event-end_time = '113000'.
+ls_event-location = `Hall B`.
+ls_event-transaction_id = `PM-4711`.
+APPEND `derya@contoso.com` TO ls_event-attendees.
+ls_event = lo_calendar->create( ls_event ).
+" Keep ls_event-id with the order to change or cancel the event later
+```
+
 ## Modules (plan)
 
 | Module | Content | Status |
@@ -490,7 +603,9 @@ ENDTRY.
 | SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.5.1 |
 | SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.5.1 |
 | Excel workbooks | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, see above | v0.5.1 |
-| Entra ID users, calendar, Teams notifications | | planned |
+| Entra ID users and groups | `ZCHE_GRAPH_USERS_LIB`, `ZCHE_GRAPH_USERS`, see above | v0.6.0 |
+| Outlook calendar | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, see above | v0.6.0 |
+| Teams notifications | | planned |
 
 ## What has been verified
 
@@ -500,7 +615,7 @@ On an SAP ABAP Cloud Developer Trial 2025 (SAP_BASIS 816).
 
 A Microsoft 365 Business Basic test tenant, one app registration, the secret in SM59, the programs run from their selection screens.
 
-> **Read this first:** besides `Organization.Read.All` and `Sites.Selected` (with `write` granted on one test site), the application also had **`Sites.FullControl.All`** during these tests. So the results show that the calls work. They do **not** show that `Sites.Selected` alone is enough, or that other sites and OneDrives stay closed. For e-mail, the application had `Mail.Send` and `Mail.ReadWrite` for the whole tenant, without the mailbox restriction described above.
+> **Read this first:** besides `Organization.Read.All` and `Sites.Selected` (with `write` granted on one test site), the application also had **`Sites.FullControl.All`** during these tests. So the results show that the calls work. They do **not** show that `Sites.Selected` alone is enough, or that other sites and OneDrives stay closed. For e-mail and the calendar, the application had `Mail.Send`, `Mail.ReadWrite` and `Calendars.ReadWrite` for the whole tenant, without the mailbox restriction described above.
 
 ![ZCHE_GRAPH_CHECK on the test tenant](docs/img/check-connection.png)
 
@@ -523,6 +638,9 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 - **E-mail:** `ZCHE_GRAPH_MAIL` sent a short text mail from a shared mailbox to itself, then listed the unread mails of its inbox, with that mail in it.
 
 ![The test mail, read back from SAP](docs/img/mail-read.png)
+
+- **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled, as for every shared mailbox; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial have no e-mail address in SU01. The comparison itself is covered only by a unit test.
+- **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times.
 
 Found on the tenant and fixed in 0.5.1:
 
@@ -587,6 +705,7 @@ Found on the tenant and fixed in 0.5.1:
 
 - **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
+- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees, all-day events, changing, cancelling and deleting, and a repeated key.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
 - **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.
