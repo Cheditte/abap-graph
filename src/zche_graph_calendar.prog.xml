@@ -53,6 +53,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_EVERY</KEY>
+     <ENTRY>Every (days/weeks/months)</ENTRY>
+     <LENGTH>33</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_FROM</KEY>
      <ENTRY>Date (from)</ENTRY>
      <LENGTH>19</LENGTH>
@@ -83,8 +89,20 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_MINS</KEY>
+     <ENTRY>Length (minutes, free time)</ENTRY>
+     <LENGTH>35</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_REMIND</KEY>
      <ENTRY>Reminder (minutes, -1 = off)</ENTRY>
+     <LENGTH>36</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_REPEAT</KEY>
+     <ENTRY>Repeat: daily/weekly/monthly</ENTRY>
      <LENGTH>36</LENGTH>
     </item>
     <item>
@@ -92,6 +110,12 @@
      <KEY>P_SUBJ</KEY>
      <ENTRY>Subject</ENTRY>
      <LENGTH>15</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_TEAMS</KEY>
+     <ENTRY>Teams meeting</ENTRY>
+     <LENGTH>21</LENGTH>
     </item>
     <item>
      <ID>S</ID>
@@ -104,6 +128,12 @@
      <KEY>P_TEND</KEY>
      <ENTRY>End time</ENTRY>
      <LENGTH>16</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_TIMES</KEY>
+     <ENTRY>Or this many times</ENTRY>
+     <LENGTH>26</LENGTH>
     </item>
     <item>
      <ID>S</ID>
@@ -125,6 +155,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_UNTIL</KEY>
+     <ENTRY>Repeat until</ENTRY>
+     <LENGTH>20</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>R_CANCEL</KEY>
      <ENTRY>Cancel (attendees are told)</ENTRY>
      <LENGTH>35</LENGTH>
@@ -140,6 +176,12 @@
      <KEY>R_DELETE</KEY>
      <ENTRY>Delete from this calendar</ENTRY>
      <LENGTH>33</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>R_FREE</KEY>
+     <ENTRY>Find a free time</ENTRY>
+     <LENGTH>24</LENGTH>
     </item>
     <item>
      <ID>S</ID>

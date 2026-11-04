@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL_LIB: e-mail through Microsoft Graph (INCLUDE)
-*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_MAIL_LIB with type "Include
@@ -89,8 +89,13 @@ INTERFACE lif_graph_mail.
     END OF ty_attachment_info,
     ty_attachment_infos TYPE STANDARD TABLE OF ty_attachment_info WITH DEFAULT KEY.
 
-  " Microsoft accepts at most 4 MB per request; Base64 makes attachments a third larger
+  " Microsoft accepts at most 4 MB per request; Base64 makes attachments a third
+  " larger. Up to this sum of attachments the mail goes in one request.
   CONSTANTS max_direct_bytes TYPE i VALUE 2900000.
+  " A larger mail becomes a draft. Its attachments under 3 MB are added one
+  " request each; from 3 MB on through an upload session, as Microsoft
+  " describes it (3 to 150 MB)
+  CONSTANTS upload_min_bytes TYPE i VALUE 3145728.
   " Pieces of a large attachment must be multiples of 320 KiB: 10 x 320 KiB
   CONSTANTS upload_chunk_bytes TYPE i VALUE 3276800.
   " Exchange Online accepts attachments up to 150 MB
@@ -201,13 +206,15 @@ CLASS lcl_graph_mail DEFINITION FINAL.
     METHODS set_limits
       IMPORTING
         iv_max_direct_bytes   TYPE i
-        iv_upload_chunk_bytes TYPE i.
+        iv_upload_chunk_bytes TYPE i
+        iv_upload_min_bytes   TYPE i.
 
   PRIVATE SECTION.
     DATA mo_client TYPE REF TO lcl_graph_client.
     DATA mv_mailbox TYPE string.
     DATA mv_max_direct_bytes TYPE i.
     DATA mv_upload_chunk_bytes TYPE i.
+    DATA mv_upload_min_bytes TYPE i.
 
     METHODS path
       IMPORTING
@@ -274,12 +281,14 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     CONDENSE mv_mailbox.
     mv_max_direct_bytes = lif_graph_mail=>max_direct_bytes.
     mv_upload_chunk_bytes = lif_graph_mail=>upload_chunk_bytes.
+    mv_upload_min_bytes = lif_graph_mail=>upload_min_bytes.
   ENDMETHOD.
 
 
   METHOD set_limits.
     mv_max_direct_bytes = iv_max_direct_bytes.
     mv_upload_chunk_bytes = iv_upload_chunk_bytes.
+    mv_upload_min_bytes = iv_upload_min_bytes.
   ENDMETHOD.
 
 
@@ -588,7 +597,7 @@ CLASS lcl_graph_mail IMPLEMENTATION.
 
     LOOP AT is_mail-attachments INTO ls_attachment.
       lv_size = xstrlen( ls_attachment-content ).
-      IF lv_size <= mv_max_direct_bytes.
+      IF lv_size < mv_upload_min_bytes.
         CREATE OBJECT lo_writer.
         write_attachment( io_writer = lo_writer is_attachment = ls_attachment ).
         lv_json = lo_writer->result( ).
@@ -915,6 +924,7 @@ CLASS ltc_graph_mail DEFINITION FINAL FOR TESTING.
     METHODS address_text FOR TESTING.
     METHODS send_small FOR TESTING RAISING lcx_graph.
     METHODS send_large FOR TESTING RAISING lcx_graph.
+    METHODS attachment_under_3mb FOR TESTING RAISING lcx_graph.
     METHODS no_recipient FOR TESTING.
     METHODS list_unread FOR TESTING RAISING lcx_graph.
     METHODS attachment_bytes FOR TESTING RAISING lcx_graph.
@@ -1012,8 +1022,35 @@ CLASS ltc_graph_mail IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD attachment_under_3mb.
+    " Too large for one request in total, but under 3 MB itself: the draft
+    " gets it in one request, without an upload session
+    DATA ls_mail TYPE lif_graph_mail=>ty_mail.
+    DATA ls_attachment TYPE lif_graph_mail=>ty_attachment.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_count TYPE i.
+
+    mo_cut->set_limits( iv_max_direct_bytes = 10 iv_upload_chunk_bytes = 4 iv_upload_min_bytes = 20 ).
+    ls_mail-subject = `2.95 MB`.
+    ls_mail-to = lcl_graph_mail=>addresses( `derya@b.com` ).
+    ls_attachment-name = `report.pdf`.
+    ls_attachment-content = bytes( `ABCDEFGHIJKL` ).
+    APPEND ls_attachment TO ls_mail-attachments.
+    mo_http->answer( iv_status = 201 iv_body = `{"id":"M1"}` ).
+    mo_http->answer( iv_status = 201 iv_body = `{"id":"A1"}` ).
+    mo_http->answer( iv_status = 202 ).
+    mo_cut->send( ls_mail ).
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 4 ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages/M1/attachments` ).
+    ls_request = request_at( 4 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages/M1/send` ).
+  ENDMETHOD.
+
+
   METHOD send_large.
-    " Limits of 10 bytes and pieces of 4 bytes stand for 2.9 MB and 3.2 MB
+    " Limits of 10, 11 and 4 bytes stand for 2.9 MB, 3 MB and pieces of 3.2 MB
     DATA ls_mail TYPE lif_graph_mail=>ty_mail.
     DATA ls_attachment TYPE lif_graph_mail=>ty_attachment.
     DATA ls_request TYPE ltd_graph_http=>ty_request.
@@ -1021,7 +1058,7 @@ CLASS ltc_graph_mail IMPLEMENTATION.
     DATA lv_count TYPE i.
     DATA lv_more TYPE xstring.
 
-    mo_cut->set_limits( iv_max_direct_bytes = 10 iv_upload_chunk_bytes = 4 ).
+    mo_cut->set_limits( iv_max_direct_bytes = 10 iv_upload_chunk_bytes = 4 iv_upload_min_bytes = 11 ).
     ls_mail-subject = `Big`.
     ls_mail-to = lcl_graph_mail=>addresses( `derya@b.com` ).
     ls_attachment-name = `small.txt`.

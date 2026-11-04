@@ -2,13 +2,13 @@
 
 > **English** | [Türkçe](README.tr.md)
 
-Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no middleware, no add-on. A shared core does the sign-in, the HTTP calls, JSON, retries and paging. Modules for each Microsoft product build on it: e-mail first, then SharePoint/OneDrive, Lists, Excel, Entra ID, calendar.
+Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no middleware, no add-on. A shared core does the sign-in, the HTTP calls, JSON, retries and paging. Modules for each Microsoft product build on it: e-mail, SharePoint/OneDrive, Lists, Excel, Entra ID, calendar and Teams.
 
 - **Copy and paste:** you paste the source into SE38. No tables, no dictionary objects; abapGit is optional.
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.6.0, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.0, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -126,6 +126,14 @@ ENDTRY.
 | `LCL_GRAPH_CONV` | UTF-8, Base64 (for attachments), URL encoding |
 | `LCX_GRAPH` | HTTP status, Microsoft error code, `request-id`, hint |
 
+### Microsoft calls and SAP transactions
+
+A call to Microsoft is not part of the SAP transaction: a sent mail or a created item stays when your program later fails or rolls back. And while it retries after HTTP 429, the core waits with `WAIT UP TO`, which commits the open database changes of your program. So:
+- call the modules **after** `COMMIT WORK`, not between your database changes and the commit;
+- when a call must not get lost, write what is to be sent into a table of your own in the same transaction, and let a job send it and mark it as sent (an *outbox*).
+
+Whether the HTTP call itself also commits the database was not measured.
+
 ## E-mail module
 
 Send and read mail as one mailbox, for example `sap@contoso.com`. The module consists of the include `ZCHE_GRAPH_MAIL_LIB` (class `LCL_GRAPH_MAIL`) and the program `ZCHE_GRAPH_MAIL`, which sends a test mail or lists a folder.
@@ -134,7 +142,7 @@ Send and read mail as one mailbox, for example `sap@contoso.com`. The module con
 - text or HTML, To/Cc/Bcc, reply-to, importance;
 - attachments of any kind, including a spool request as PDF (ABAP list, SAPscript or Smart Forms);
 - inline pictures for HTML (`<img src="cid:logo">`);
-- mails up to about 2.9 MB of attachments in one call. Larger mails are created as a draft, get their attachments one by one (single attachments over 2.9 MB in pieces of 3.2 MB, up to 150 MB) and are then sent.
+- mails up to about 2.9 MB of attachments in one call. Larger mails are created as a draft, get their attachments one by one (an attachment of 3 MB or more through an upload session, in pieces of 3.2 MB, up to 150 MB) and are then sent.
 
 **Reading:**
 - the messages of a folder (only unread if wanted), with sender, subject and preview;
@@ -148,7 +156,7 @@ Send and read mail as one mailbox, for example `sap@contoso.com`. The module con
 | Application permissions **`Mail.Send`** (sending) and **`Mail.ReadWrite`** (large mails, reading, marking, moving), with admin consent | Without them Microsoft answers HTTP 403 | Microsoft 365 / Entra administrator |
 | **Restriction to the SAP mailbox(es)** | Without it the application may send as and read **any** mailbox of the company | Exchange Online administrator |
 | A mailbox for SAP, for example `sap@contoso.com` | The sender | Microsoft 365 administrator |
-| For attachments over 2.9 MB: SAP may reach `outlook.office.com` with HTTPS (SICF proxy settings, STRUST) | Microsoft hands out an upload URL on that host; no SM59 destination is used for it | Basis |
+| For attachments of 3 MB or more: SAP may reach `outlook.office.com` with HTTPS (SICF proxy settings, STRUST) | Microsoft hands out an upload URL on that host; no SM59 destination is used for it | Basis |
 
 **Restricting the mailboxes.** Exchange Online offers two ways. Check Microsoft's current documentation for which to use; Microsoft now recommends the first.
 
@@ -161,6 +169,8 @@ Send and read mail as one mailbox, for example `sap@contoso.com`. The module con
    ```
 
 Neither way has been tried with this project yet.
+
+**Looking into the mailbox in Outlook.** The application's permissions are for SAP only; they do not let a person open the shared mailbox. To see it in Outlook on the web, an administrator gives that person access: Microsoft 365 admin center → Teams & groups → Shared mailboxes → the mailbox → Mailbox permissions → **Read and manage**. After a while it shows up in Outlook, or the person opens it with the profile picture → **Open another mailbox**.
 
 ### Install
 
@@ -549,6 +559,10 @@ The module consists of the include `ZCHE_GRAPH_CALENDAR_LIB` (class `LCL_GRAPH_C
 - **Your own key** (`transaction_id`), for example the order number: Microsoft creates an event only once per key, so running the same job twice does not make two events.
 - **List** the events of a period, with the occurrences of series one by one.
 - **Change** an event (attendees get the update), **cancel** it (attendees get the cancellation, with a comment) or **delete** it from this calendar only.
+- **Teams meeting:** with `teams_meeting = X` Microsoft opens a Teams meeting and puts the join link into the invitation and into `join_url`. The organizer is the mailbox, so it needs a Teams licence; a shared mailbox has none.
+- **Series:** daily, weekly or monthly, every n days, weeks or months, until a date or n times. A weekly series falls on the weekday of the first start, a monthly one on its day of the month, both counted in UTC; in a time zone with summer time a series keeps its UTC time, so it moves by an hour locally twice a year.
+- **Who comes:** the list gives each attendee's answer (`accepted`, `declined`, `tentativelyAccepted`, `none`).
+- **A free time:** the first 30 (or n) minutes in a window of a day when all given people are free; tentative counts as busy.
 
 Dates and times are SAP dates and times in an SAP time zone, by default the user's (`SY-ZONLO`, set in SU01). They travel to Microsoft as UTC and come back in the same SAP time zone, so summer time is handled by SAP's own time zone tables.
 
@@ -572,7 +586,8 @@ Run `ZCHE_GRAPH_CALENDAR` with the tenant and the mailbox whose calendar to use.
 | Action | Fields |
 |---|---|
 | **List events** | Date (from) and date to |
-| **Create an event** | Date, start and end time or "All day", subject; optionally location, attendees (`a@x.com; b@x.com`), text, reminder, your key |
+| **Create an event** | Date, start and end time or "All day", subject; optionally location, attendees (`a@x.com; b@x.com`), text, reminder, your key; "Teams meeting"; repeat, every, until or times |
+| **Find a free time** | Date, start and end of the window, length in minutes, attendees |
 | **Cancel** | Event ID (from the list) and a comment |
 | **Delete from this calendar** | Event ID |
 
@@ -590,8 +605,58 @@ ls_event-end_time = '113000'.
 ls_event-location = `Hall B`.
 ls_event-transaction_id = `PM-4711`.
 APPEND `derya@contoso.com` TO ls_event-attendees.
+ls_event-teams_meeting = abap_true.
 ls_event = lo_calendar->create( ls_event ).
-" Keep ls_event-id with the order to change or cancel the event later
+" Keep ls_event-id with the order to change or cancel the event later;
+" ls_event-join_url is the Teams link
+```
+
+## Teams channel messages
+
+Post a message to a Microsoft Teams channel: a job ended with an error, a document waits for approval, the nightly run is done. The module consists of the include `ZCHE_GRAPH_TEAMS_LIB` (class `LCL_GRAPH_TEAMS`) and the program `ZCHE_GRAPH_TEAMS`; it needs only `ZCHE_GRAPH_CORE`.
+
+Microsoft Graph does not let an application post to a channel. Teams has a **Workflows webhook** for this instead: a channel gets a long, secret address, and whatever is posted to it appears in the channel. No token and no Entra permission are involved, so this module does not use the sign-in of the others.
+
+A message is a card (an *Adaptive Card*):
+- a title in the colour of its level: `info`, `good`, `warning` or `error`;
+- a text;
+- name/value lines, for example `Order=4711 | Plant=1000`;
+- a button that opens a link, for example to a Fiori app.
+
+A message is not sent again after an error: it may have arrived already.
+
+### What the Teams module needs
+
+| What | Why | Who |
+|---|---|---|
+| In the channel: **⋯ → Workflows → "Send webhook alerts to a channel"**, saved. Teams then shows the address. | The address the messages go to | A member of the team |
+| **SM59 destination, type G**: target host = the host of the address; port 443; path prefix = the rest of the address from the first `/` after the host, `?...&sig=...` included; SSL active, `ANONYM`; no logon data | The address is a secret: whoever has it can post to the channel. In SM59 it is kept like a password, and the code knows only the destination's name. | Basis |
+| STRUST: the certificate of that host trusted; a proxy if SAP reaches the internet through one | As for the Microsoft hosts | Basis |
+
+The workflow runs under the account that created it; when that person leaves, the workflow may stop. For a real system create it with a service account.
+
+### Install
+
+After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_TEAMS_LIB` (type **Include program**) → paste [`src/zche_graph_teams_lib.prog.abap`](src/zche_graph_teams_lib.prog.abap). Then **SE38** → `ZCHE_GRAPH_TEAMS` (type **Executable program**) → paste [`src/zche_graph_teams.prog.abap`](src/zche_graph_teams.prog.abap) → activate.
+
+### Try it
+
+Run `ZCHE_GRAPH_TEAMS` with the SM59 destination, a title and a text. "Add system, user and time" adds three lines. As the last step of a background job it tells the channel that the steps before it have run.
+
+### Use it in your own program
+
+```abap
+DATA lo_teams TYPE REF TO lcl_graph_teams.
+DATA ls_card TYPE lif_graph_teams=>ty_card.
+
+CREATE OBJECT lo_teams EXPORTING iv_destination = 'ZTEAMS_FINANCE'.
+ls_card-title = `Payment run 2026-11-05 stopped`.
+ls_card-text = `3 invoices without bank details`.
+ls_card-level = `error`.
+ls_card-facts = lcl_graph_teams=>facts_from_text( `Company code=1000 | Run=F110/0511` ).
+ls_card-link_url = `https://sap.contoso.com/fiori#PaymentRun-manage`.
+ls_card-link_title = `Open the payment run`.
+lo_teams->send( ls_card ).
 ```
 
 ## Modules (plan)
@@ -604,8 +669,8 @@ ls_event = lo_calendar->create( ls_event ).
 | SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.5.1 |
 | Excel workbooks | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, see above | v0.5.1 |
 | Entra ID users and groups | `ZCHE_GRAPH_USERS_LIB`, `ZCHE_GRAPH_USERS`, see above | v0.6.0 |
-| Outlook calendar | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, see above | v0.6.0 |
-| Teams notifications | | planned |
+| Outlook calendar | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, see above | v0.7.0 |
+| Teams channel messages | `ZCHE_GRAPH_TEAMS_LIB`, `ZCHE_GRAPH_TEAMS`, see above | v0.7.0 |
 
 ## What has been verified
 
@@ -641,6 +706,8 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 
 - **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled, as for every shared mailbox; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial have no e-mail address in SU01. The comparison itself is covered only by a unit test.
 - **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times. Run again with the same key, it got the same event back; the calendar still had one.
+- **Teams meetings and free time (5 November, 0.7.0):** in a licensed user's calendar, a weekly Teams meeting twice, without attendees: both occurrences came back with the join link, then the series was deleted. The free-time search found 09:00–09:30 for two mailboxes, and no time in the half hour of the meeting.
+- **Teams channel messages:** only unit tests, and the error for an SM59 destination that does not exist. No real channel yet.
 
 Found on the tenant and fixed in 0.5.1:
 
@@ -705,7 +772,7 @@ Found on the tenant and fixed in 0.5.1:
 
 - **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
-- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees, all-day events, changing, cancelling and deleting.
+- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees and their answers, all-day events, changing and cancelling, monthly series, a series in a time zone with summer time, free time of people outside the company.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
 - **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.

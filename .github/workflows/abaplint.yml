@@ -1,0 +1,16 @@
+name: abaplint
+
+# Checks every push and pull request against ABAP 7.00 (see abaplint.json)
+on:
+  push:
+  pull_request:
+
+jobs:
+  abaplint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx --yes @abaplint/cli@2.120.92 abaplint.json

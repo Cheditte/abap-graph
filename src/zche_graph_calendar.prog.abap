@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR: Outlook calendar through Microsoft Graph
-*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_CALENDAR_LIB
@@ -10,7 +10,10 @@
 *&
 *& What you can do from the screen (also as a background job):
 *&   - list the events of a mailbox's calendar for a period
-*&   - create an event; attendees get an invitation
+*&   - create an event; attendees get an invitation. Also as a Teams
+*&     meeting with a join link, and as a daily, weekly or monthly series
+*&   - see who accepted or declined (in the list)
+*&   - find the first time when all attendees are free
 *&   - cancel an event (attendees are told) or delete it
 *& Dates and times are in the SAP time zone on the screen.
 *& Your own programs call LCL_GRAPH_CALENDAR directly; see the README.
@@ -32,6 +35,7 @@ SELECTION-SCREEN END OF BLOCK b_conn.
 SELECTION-SCREEN BEGIN OF BLOCK b_do WITH FRAME TITLE t_do.
 PARAMETERS r_list RADIOBUTTON GROUP do DEFAULT 'X'.
 PARAMETERS r_create RADIOBUTTON GROUP do.
+PARAMETERS r_free RADIOBUTTON GROUP do.
 PARAMETERS r_cancel RADIOBUTTON GROUP do.
 PARAMETERS r_delete RADIOBUTTON GROUP do.
 SELECTION-SCREEN END OF BLOCK b_do.
@@ -43,7 +47,16 @@ PARAMETERS p_tstart TYPE t DEFAULT '090000'.
 PARAMETERS p_tend TYPE t DEFAULT '100000'.
 PARAMETERS p_allday AS CHECKBOX.
 PARAMETERS p_tz TYPE timezone.
+PARAMETERS p_mins TYPE i DEFAULT 30.
 SELECTION-SCREEN END OF BLOCK b_when.
+
+SELECTION-SCREEN BEGIN OF BLOCK b_more WITH FRAME TITLE t_more.
+PARAMETERS p_teams AS CHECKBOX.
+PARAMETERS p_repeat TYPE c LENGTH 10 LOWER CASE.
+PARAMETERS p_every TYPE i DEFAULT 1.
+PARAMETERS p_until TYPE d.
+PARAMETERS p_times TYPE i.
+SELECTION-SCREEN END OF BLOCK b_more.
 
 SELECTION-SCREEN BEGIN OF BLOCK b_what WITH FRAME TITLE t_what.
 PARAMETERS p_subj TYPE c LENGTH 120 LOWER CASE.
@@ -110,12 +123,20 @@ CLASS lcl_text IMPLEMENTATION.
     t_do = get( iv_en = 'What to do' iv_tr = 'Ne yapılacak' ).
     t_when = get( iv_en = 'When' iv_tr = 'Ne zaman' ).
     t_what = get( iv_en = 'Event' iv_tr = 'Etkinlik' ).
+    t_more = get( iv_en = 'Teams and series' iv_tr = 'Teams ve tekrar' ).
     add( EXPORTING iv_name = 'P_TENANT' iv_en = 'Tenant ID or domain' iv_tr = 'Tenant ID ya da alan adı' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_BOX' iv_en = 'Mailbox (calendar)' iv_tr = 'Posta kutusu (takvim)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_LOGIN' iv_en = 'SM59: Microsoft sign-in' iv_tr = 'SM59: Microsoft girişi' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_API' iv_en = 'SM59: Microsoft Graph' iv_tr = 'SM59: Microsoft Graph' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_LIST' iv_en = 'List events' iv_tr = 'Etkinlikleri listele' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_CREATE' iv_en = 'Create an event' iv_tr = 'Etkinlik oluştur' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'R_FREE' iv_en = 'Find a free time' iv_tr = 'Boş zaman bul' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_MINS' iv_en = 'Length (minutes, free time)' iv_tr = 'Süre (dakika, boş zaman)' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_TEAMS' iv_en = 'Teams meeting' iv_tr = 'Teams toplantısı' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_REPEAT' iv_en = 'Repeat: daily/weekly/monthly' iv_tr = 'Tekrar: daily/weekly/monthly' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_EVERY' iv_en = 'Every (days/weeks/months)' iv_tr = 'Her (gün/hafta/ay)' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_UNTIL' iv_en = 'Repeat until' iv_tr = 'Şu tarihe kadar' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_TIMES' iv_en = 'Or this many times' iv_tr = 'Ya da bu kadar kez' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_CANCEL' iv_en = 'Cancel (attendees are told)' iv_tr = 'İptal et (katılımcılara gider)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_DELETE' iv_en = 'Delete from this calendar' iv_tr = 'Bu takvimden sil' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_FROM' iv_en = 'Date (from)' iv_tr = 'Tarih (başlangıç)' CHANGING ct_texts = lt_texts ).
@@ -236,7 +257,15 @@ CLASS lcl_app IMPLEMENTATION.
     DATA lv_to TYPE d.
     DATA lv_count TYPE i.
     DATA lv_number TYPE string.
+    DATA ls_response TYPE lif_graph_calendar=>ty_response.
+    DATA lt_addresses TYPE lif_graph_calendar=>ty_addresses.
+    DATA lv_found TYPE abap_bool.
+    DATA lv_start TYPE t.
+    DATA lv_end TYPE t.
 
+    lv_value = p_att.
+    TRANSLATE lv_value USING ',;'.
+    SPLIT lv_value AT ';' INTO TABLE lt_addresses.
     lv_mailbox = p_box.
     CONDENSE lv_mailbox.
     CREATE OBJECT lo_calendar
@@ -265,6 +294,14 @@ CLASS lcl_app IMPLEMENTATION.
           CONCATENATE lv_text lv_value INTO lv_text SEPARATED BY ` | `.
         ENDIF.
         WRITE: / lv_text.
+        IF ls_event-join_url IS NOT INITIAL.
+          CONCATENATE `      Teams: ` ls_event-join_url INTO lv_text.
+          WRITE: / lv_text.
+        ENDIF.
+        LOOP AT ls_event-responses INTO ls_response.
+          CONCATENATE `      ` ls_response-address `: ` ls_response-response INTO lv_text.
+          WRITE: / lv_text.
+        ENDLOOP.
         CONCATENATE `      ID: ` ls_event-id INTO lv_text.
         WRITE: / lv_text.
       ENDLOOP.
@@ -280,9 +317,12 @@ CLASS lcl_app IMPLEMENTATION.
       ls_event-all_day = p_allday.
       ls_event-reminder = p_remind.
       ls_event-transaction_id = p_key.
-      lv_value = p_att.
-      TRANSLATE lv_value USING ',;'.
-      SPLIT lv_value AT ';' INTO TABLE ls_event-attendees.
+      ls_event-teams_meeting = p_teams.
+      ls_event-repeat = p_repeat.
+      ls_event-repeat_every = p_every.
+      ls_event-repeat_until = p_until.
+      ls_event-repeat_times = p_times.
+      ls_event-attendees = lt_addresses.
       ls_event = lo_calendar->create( ls_event ).
       lv_when = when( ls_event ).
       lv_text = lcl_text=>get( iv_en = `Created: ` iv_tr = `Oluşturuldu: ` ).
@@ -294,6 +334,28 @@ CLASS lcl_app IMPLEMENTATION.
         CONCATENATE `      ` ls_event-web_link INTO lv_text.
         WRITE: / lv_text.
       ENDIF.
+      IF ls_event-join_url IS NOT INITIAL.
+        CONCATENATE `      Teams: ` ls_event-join_url INTO lv_text.
+        WRITE: / lv_text.
+      ELSEIF p_teams = abap_true.
+        lv_text = lcl_text=>get( iv_en = `      No Teams link came back: does the mailbox have a Teams licence?`
+                                 iv_tr = `      Teams bağlantısı gelmedi: posta kutusunun Teams lisansı var mı?` ).
+        WRITE: / lv_text.
+      ENDIF.
+
+    ELSEIF r_free = abap_true.
+      lo_calendar->find_free_time( EXPORTING it_addresses = lt_addresses iv_date = p_from
+                                             iv_from = p_tstart iv_to = p_tend iv_minutes = p_mins
+                                   IMPORTING ev_found = lv_found ev_start = lv_start ev_end = lv_end ).
+      IF lv_found = abap_true.
+        CONCATENATE lv_start(2) `:` lv_start+2(2) `-` lv_end(2) `:` lv_end+2(2) INTO lv_value.
+        lv_text = lcl_text=>get( iv_en = `OK Everyone is free: ` iv_tr = `OK Herkes boş: ` ).
+        CONCATENATE lv_text lv_value INTO lv_text.
+      ELSE.
+        lv_text = lcl_text=>get( iv_en = `No time in this window when everyone is free.`
+                                 iv_tr = `Bu aralıkta herkesin boş olduğu bir zaman yok.` ).
+      ENDIF.
+      WRITE: / lv_text.
 
     ELSE.
       lv_value = p_id.
