@@ -10,13 +10,13 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - JSON okuma ve yazma;
 - yeniden denemeler ve sayfalama.
 
-**Ürün modülleri** bunun üstüne kurulur: önce e-posta, sonra SharePoint/OneDrive, Listeler, Excel, Entra ID ve takvim.
+**Ürün modülleri** bunun üstüne kurulur: e-posta, SharePoint/OneDrive, Listeler, Excel, Entra ID, takvim ve Teams.
 
 - **Kopyala-yapıştır:** kaynak SE38'e yapıştırılır. Tablo ya da sözlük nesnesi yok; abapGit isteğe bağlı.
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.6.0, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.0, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -140,6 +140,14 @@ ENDTRY.
 | `LCL_GRAPH_CONV` | UTF-8, Base64 (ekler için), URL kodlama |
 | `LCX_GRAPH` | HTTP durumu, Microsoft hata kodu, `request-id`, ipucu |
 
+### Microsoft çağrıları ve SAP işlemleri (transaction)
+
+Microsoft'a yapılan çağrı SAP işleminin parçası değildir: gönderilen e-posta ya da oluşturulan kayıt, programınız sonra hata verse ya da geri alsa (rollback) da kalır. Ayrıca çekirdek, HTTP 429 sonrası yeniden denerken `WAIT UP TO` ile bekler; bu da programınızın açık veritabanı değişikliklerini kaydeder (commit). Bu yüzden:
+- modülleri veritabanı değişiklikleriniz ile commit arasında değil, `COMMIT WORK`'ten **sonra** çağırın;
+- bir çağrı kaybolmamalıysa, gönderilecek olanı aynı işlemde kendi tablonuza yazın; bir iş onu göndersin ve gönderildi diye işaretlesin (*outbox*).
+
+HTTP çağrısının kendisinin de veritabanını kaydedip kaydetmediği ölçülmedi.
+
 ## E-posta modülü
 
 Tek bir posta kutusu adına (örneğin `sap@contoso.com`) e-posta gönderir ve okur. Modülün iki nesnesi var:
@@ -151,7 +159,7 @@ Tek bir posta kutusu adına (örneğin `sap@contoso.com`) e-posta gönderir ve o
 - her türlü ek; spool talebi de PDF olarak eklenebilir (ABAP listesi, SAPscript ya da Smart Forms);
 - HTML içinde gömülü resimler (`<img src="cid:logo">`);
 - ekleri toplam yaklaşık 2,9 MB'a kadar olan e-postalar tek çağrıda gider.
-- Daha büyükleri önce taslak olarak oluşturulur, ekler tek tek eklenir ve sonra gönderilir. 2,9 MB'ı aşan tek bir ek 3,2 MB'lık parçalar halinde yüklenir; bir ek en fazla 150 MB olabilir.
+- Daha büyükleri önce taslak olarak oluşturulur, ekler tek tek eklenir ve sonra gönderilir. 3 MB ve daha büyük bir ek yükleme oturumuyla, 3,2 MB'lık parçalar halinde yüklenir; bir ek en fazla 150 MB olabilir.
 
 **Okuma:**
 - bir klasörün mesajları (istenirse yalnızca okunmamışlar), gönderen, konu ve önizlemeyle;
@@ -165,7 +173,7 @@ Tek bir posta kutusu adına (örneğin `sap@contoso.com`) e-posta gönderir ve o
 | Yönetici onaylı uygulama izinleri **`Mail.Send`** (gönderme) ve **`Mail.ReadWrite`** (büyük e-postalar, okuma, işaretleme, taşıma) | Olmazsa Microsoft HTTP 403 döner | Microsoft 365 / Entra yöneticisi |
 | **SAP posta kutularıyla sınırlama** | Olmazsa uygulama şirketteki **her** posta kutusu adına gönderebilir ve her kutuyu okuyabilir | Exchange Online yöneticisi |
 | SAP için bir posta kutusu, örneğin `sap@contoso.com` | Gönderen | Microsoft 365 yöneticisi |
-| 2,9 MB'ı aşan ekler için: SAP'nin `outlook.office.com`'a HTTPS ile çıkabilmesi (SICF proxy ayarları, STRUST) | Microsoft yükleme adresini bu host'ta veriyor; bunun için SM59 hedefi kullanılmıyor | Basis |
+| 3 MB ve daha büyük ekler için: SAP'nin `outlook.office.com`'a HTTPS ile çıkabilmesi (SICF proxy ayarları, STRUST) | Microsoft yükleme adresini bu host'ta veriyor; bunun için SM59 hedefi kullanılmıyor | Basis |
 
 **Posta kutularını sınırlamak.** Exchange Online'da iki yol var. Hangisini kullanacağınızı Microsoft'un güncel belgelerinden kontrol edin; Microsoft artık ilkini öneriyor.
 
@@ -178,6 +186,8 @@ Tek bir posta kutusu adına (örneğin `sap@contoso.com`) e-posta gönderir ve o
    ```
 
 İki yol da bu projeyle henüz denenmedi.
+
+**Posta kutusuna Outlook'tan bakmak.** Uygulamanın izinleri yalnız SAP içindir; bir kişinin paylaşılan kutuyu açmasını sağlamaz. Outlook web'de görmek için yönetici o kişiye erişim verir: Microsoft 365 yönetim merkezi → Ekipler ve gruplar → Paylaşılan posta kutuları → kutu → Posta kutusu izinleri → **Okuma ve yönetme**. Bir süre sonra kutu Outlook'ta görünür; ya da kişi profil resmi → **Başka bir posta kutusu aç** ile açar.
 
 ### Kurulum
 
@@ -587,6 +597,10 @@ Modül, `ZCHE_GRAPH_CALENDAR_LIB` include'u (`LCL_GRAPH_CALENDAR` sınıfı) ve 
 - **Kendi anahtarınız** (`transaction_id`), örneğin emir numarası: Microsoft bir anahtar için yalnız bir etkinlik oluşturur. Aynı iş iki kez çalışsa da iki etkinlik olmaz.
 - **Listeleme:** bir dönemin etkinlikleri; yinelenen etkinliklerin her tekrarı ayrı satırdır.
 - **Değiştirme** (katılımcılara güncelleme gider), **iptal** (katılımcılara açıklamayla iptal gider) ya da yalnız bu takvimden **silme**.
+- **Teams toplantısı:** `teams_meeting = X` ile Microsoft bir Teams toplantısı açar ve katılma bağlantısını davete ve `join_url` alanına koyar. Düzenleyici posta kutusudur; Teams lisansı gerekir, paylaşılan kutunun lisansı yoktur.
+- **Tekrar:** günlük, haftalık ya da aylık; her n gün, hafta ya da ay; bir tarihe kadar ya da n kez. Haftalık seri ilk başlangıcın haftanın gününe, aylık seri ayın gününe düşer; ikisi de UTC'ye göre hesaplanır. Yaz saati uygulanan bir saat diliminde seri UTC saatini korur, bu yüzden yerel saatte yılda iki kez bir saat kayar.
+- **Kim geliyor:** liste her katılımcının cevabını verir (`accepted`, `declined`, `tentativelyAccepted`, `none`).
+- **Boş zaman:** bir günün belli bir aralığında, verilen herkesin boş olduğu ilk 30 (ya da n) dakika; "belki" dolu sayılır.
 
 Tarih ve saatler, bir SAP saat dilimindeki SAP tarih ve saatleridir; varsayılan, kullanıcının saat dilimidir (`SY-ZONLO`, SU01'de). Microsoft'a UTC olarak gider ve aynı SAP saat dilimine çevrilerek döner; yaz saati SAP'nin kendi saat dilimi tablolarıyla hesaplanır.
 
@@ -610,7 +624,8 @@ Sınırlamayı e-posta modülünde anlatıldığı gibi yapın; RBAC for Applica
 | İşlem | Alanlar |
 |---|---|
 | **Etkinlikleri listele** | Başlangıç ve bitiş tarihi |
-| **Etkinlik oluştur** | Tarih, başlangıç ve bitiş saati ya da "Tüm gün", konu; isteğe bağlı yer, katılımcılar (`a@x.com; b@x.com`), metin, hatırlatma, anahtarınız |
+| **Etkinlik oluştur** | Tarih, başlangıç ve bitiş saati ya da "Tüm gün", konu; isteğe bağlı yer, katılımcılar (`a@x.com; b@x.com`), metin, hatırlatma, anahtarınız; "Teams toplantısı"; tekrar, her, bitiş tarihi ya da kez |
+| **Boş zaman bul** | Tarih, aralığın başı ve sonu, dakika olarak süre, katılımcılar |
 | **İptal et** | Etkinlik ID (listeden) ve açıklama |
 | **Bu takvimden sil** | Etkinlik ID |
 
@@ -628,8 +643,58 @@ ls_event-end_time = '113000'.
 ls_event-location = `Hol B`.
 ls_event-transaction_id = `PM-4711`.
 APPEND `derya@contoso.com` TO ls_event-attendees.
+ls_event-teams_meeting = abap_true.
 ls_event = lo_calendar->create( ls_event ).
-" Etkinliği sonra değiştirmek ya da iptal etmek için ls_event-id'yi emirle birlikte saklayın
+" Etkinliği sonra değiştirmek ya da iptal etmek için ls_event-id'yi emirle birlikte saklayın;
+" ls_event-join_url Teams bağlantısıdır
+```
+
+## Teams kanal mesajları
+
+Bir Microsoft Teams kanalına mesaj gönderir: bir iş hata verdi, bir belge onay bekliyor, gece işi bitti. Modül, `ZCHE_GRAPH_TEAMS_LIB` include'u (`LCL_GRAPH_TEAMS` sınıfı) ve `ZCHE_GRAPH_TEAMS` programından oluşur; yalnız `ZCHE_GRAPH_CORE`'a ihtiyaç duyar.
+
+Microsoft Graph, bir uygulamanın kanala mesaj yazmasına izin vermiyor. Teams bunun yerine **Workflows web kancası** sunuyor: kanala uzun, gizli bir adres verilir; bu adrese ne gönderilirse kanalda görünür. Token ya da Entra izni gerekmez; bu modül diğerlerinin oturum açma adımını kullanmaz.
+
+Mesaj bir karttır (*Adaptive Card*):
+- düzeyinin renginde bir başlık: `info`, `good`, `warning` ya da `error`;
+- bir metin;
+- ad/değer satırları, örneğin `Sipariş=4711 | Üretim yeri=1000`;
+- bir bağlantı açan buton, örneğin bir Fiori uygulamasına.
+
+Hatadan sonra mesaj tekrar gönderilmez: ulaşmış olabilir.
+
+### Teams modülünün gereksinimleri
+
+| Ne | Neden | Kim |
+|---|---|---|
+| Kanalda: **⋯ → Workflows → "Send webhook alerts to a channel"**, kaydedilir. Teams adresi gösterir. | Mesajların gideceği adres | Ekibin bir üyesi |
+| **SM59 hedefi, G tipi**: hedef host = adresin host'u; port 443; yol öneki = host'tan sonraki ilk `/`'tan sonuna kadar, `?...&sig=...` dahil; SSL etkin, `ANONYM`; oturum bilgisi yok | Adres gizlidir: bilen herkes kanala yazabilir. SM59'da bir parola gibi saklanır, kod yalnız hedefin adını bilir. | Basis |
+| STRUST: o host'un sertifikasına güven; SAP internete proxy ile çıkıyorsa proxy | Microsoft host'larında olduğu gibi | Basis |
+
+Akış, onu oluşturan hesapla çalışır; o kişi ayrılırsa akış durabilir. Gerçek sistemde bir hizmet hesabıyla oluşturun.
+
+### Kurulum
+
+`ZCHE_GRAPH_CORE`'dan sonra: **SE38** → `ZCHE_GRAPH_TEAMS_LIB` (tür **Include program**) → [`src/zche_graph_teams_lib.prog.abap`](src/zche_graph_teams_lib.prog.abap) yapıştırın. Sonra **SE38** → `ZCHE_GRAPH_TEAMS` (tür **Executable program**) → [`src/zche_graph_teams.prog.abap`](src/zche_graph_teams.prog.abap) yapıştırın → etkinleştirin.
+
+### Deneyin
+
+`ZCHE_GRAPH_TEAMS`'i SM59 hedefi, bir başlık ve bir metinle çalıştırın. "Sistem, kullanıcı, saat ekle" üç satır ekler. Bir arka plan işinin son adımı olarak, önceki adımların çalıştığını kanala bildirir.
+
+### Kendi programınızda kullanmak
+
+```abap
+DATA lo_teams TYPE REF TO lcl_graph_teams.
+DATA ls_card TYPE lif_graph_teams=>ty_card.
+
+CREATE OBJECT lo_teams EXPORTING iv_destination = 'ZTEAMS_FINANS'.
+ls_card-title = `5 Kasım ödeme çalıştırması durdu`.
+ls_card-text = `Banka bilgisi olmayan 3 fatura`.
+ls_card-level = `error`.
+ls_card-facts = lcl_graph_teams=>facts_from_text( `Şirket kodu=1000 | Çalıştırma=F110/0511` ).
+ls_card-link_url = `https://sap.contoso.com/fiori#PaymentRun-manage`.
+ls_card-link_title = `Ödeme çalıştırmasını aç`.
+lo_teams->send( ls_card ).
 ```
 
 ## Modüller (plan)
@@ -642,8 +707,8 @@ ls_event = lo_calendar->create( ls_event ).
 | SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.5.1 |
 | Excel çalışma kitapları | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, yukarıya bakın | v0.5.1 |
 | Entra ID kullanıcıları ve grupları | `ZCHE_GRAPH_USERS_LIB`, `ZCHE_GRAPH_USERS`, yukarıya bakın | v0.6.0 |
-| Outlook takvimi | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, yukarıya bakın | v0.6.0 |
-| Teams bildirimleri | | planlandı |
+| Outlook takvimi | `ZCHE_GRAPH_CALENDAR_LIB`, `ZCHE_GRAPH_CALENDAR`, yukarıya bakın | v0.7.0 |
+| Teams kanal mesajları | `ZCHE_GRAPH_TEAMS_LIB`, `ZCHE_GRAPH_TEAMS`, yukarıya bakın | v0.7.0 |
 
 ## Neler doğrulandı
 
@@ -679,6 +744,8 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 
 - **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı, her paylaşılan kutuda olduğu gibi; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yok. Karşılaştırmanın kendisi yalnız birim testiyle sınandı.
 - **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi. Aynı anahtarla tekrar çalıştırılınca aynı etkinlik döndü; takvimde yine tek etkinlik vardı.
+- **Teams toplantıları ve boş zaman (5 Kasım, 0.7.0):** lisanslı bir kullanıcının takviminde, katılımcısız, iki kez tekrarlanan haftalık bir Teams toplantısı: iki tekrar da katılma bağlantısıyla geri geldi, sonra seri silindi. Boş zaman araması iki posta kutusu için 09:00–09:30'u buldu; toplantının olduğu yarım saatte boş zaman bulmadı.
+- **Teams kanal mesajları:** yalnız birim testleri ve var olmayan bir SM59 hedefinin hatası. Henüz gerçek bir kanal yok.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
@@ -742,7 +809,7 @@ Tenant'ta bulunup 0.5.1'de düzeltilenler:
 **Henüz doğrulanmadı:**
 - **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
-- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı ve tüm gün etkinlikler, değiştirme, iptal ve silme.
+- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı etkinlikler ve cevapları, tüm gün etkinlikler, değiştirme ve iptal, aylık seri, yaz saati olan bir saat diliminde seri, şirket dışındaki kişilerin boş zamanı.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
 - **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.

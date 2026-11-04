@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR_LIB: Outlook calendar through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.6.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CALENDAR_LIB with type
@@ -14,6 +14,9 @@
 *&   - create an event, with attendees who get an invitation
 *&   - list the events of a period
 *&   - change an event, cancel it (attendees are told) or delete it
+*&   - as a Teams meeting with a join link, once or as a series
+*&   - read who accepted or declined
+*&   - find a time when everyone is free
 *& Dates and times are SAP dates and times in an SAP time zone (by
 *& default the user's, SY-ZONLO); they travel to Microsoft as UTC.
 *&
@@ -27,12 +30,35 @@
 INTERFACE lif_graph_calendar.
   TYPES ty_addresses TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
 
+  " RESPONSE: none, notResponded, accepted, tentativelyAccepted, declined, organizer
+  TYPES:
+    BEGIN OF ty_response,
+      address  TYPE string,
+      response TYPE string,
+    END OF ty_response,
+    ty_responses TYPE STANDARD TABLE OF ty_response WITH DEFAULT KEY.
+
+  " VIEW: one digit per interval: 0 free, 1 tentative, 2 busy, 3 away, 4 elsewhere
+  TYPES:
+    BEGIN OF ty_free_busy,
+      address TYPE string,
+      view    TYPE string,
+      error   TYPE string,
+    END OF ty_free_busy,
+    ty_free_busies TYPE STANDARD TABLE OF ty_free_busy WITH DEFAULT KEY.
+
   " SHOW_AS: free, tentative, busy, oof or workingElsewhere.
   " An all-day event takes START_DATE to END_DATE (both included); times are
   " ignored. REMINDER: minutes before the start; -1 = no reminder.
   " TRANSACTION_ID: your own key, for example the SAP document number.
   " Microsoft creates an event only once per key, so a repeated call
   " does not make a second event.
+  " TEAMS_MEETING = X: a Teams meeting; Microsoft puts the join link into the
+  " invitation and JOIN_URL. The organizer (the mailbox) needs a Teams licence.
+  " REPEAT: daily, weekly or monthly (empty: once), every REPEAT_EVERY days,
+  " weeks or months, until REPEAT_UNTIL or REPEAT_TIMES times (both empty:
+  " no end). A weekly series falls on the weekday of the start, a monthly
+  " one on its day of the month, both counted in UTC.
   TYPES:
     BEGIN OF ty_event,
       id             TYPE string,
@@ -54,6 +80,13 @@ INTERFACE lif_graph_calendar.
       organizer      TYPE string,
       cancelled      TYPE abap_bool,
       web_link       TYPE string,
+      teams_meeting  TYPE abap_bool,
+      join_url       TYPE string,
+      repeat         TYPE string,
+      repeat_every   TYPE i,
+      repeat_until   TYPE d,
+      repeat_times   TYPE i,
+      responses      TYPE ty_responses,
     END OF ty_event,
     ty_events TYPE STANDARD TABLE OF ty_event WITH DEFAULT KEY.
 ENDINTERFACE.
@@ -125,6 +158,36 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
       RAISING
         lcx_graph.
 
+    "! Free and busy times of people (addresses) on IV_DATE from IV_FROM to
+    "! IV_TO, in steps of IV_INTERVAL minutes
+    METHODS free_busy
+      IMPORTING
+        it_addresses        TYPE lif_graph_calendar=>ty_addresses
+        iv_date             TYPE d
+        iv_from             TYPE t
+        iv_to               TYPE t
+        iv_interval         TYPE i DEFAULT 15
+      RETURNING
+        value(rt_free_busy) TYPE lif_graph_calendar=>ty_free_busies
+      RAISING
+        lcx_graph.
+
+    "! The first IV_MINUTES on IV_DATE between IV_FROM and IV_TO when all of
+    "! IT_ADDRESSES are free (tentative counts as busy). EV_FOUND = X if any.
+    METHODS find_free_time
+      IMPORTING
+        it_addresses TYPE lif_graph_calendar=>ty_addresses
+        iv_date      TYPE d
+        iv_from      TYPE t
+        iv_to        TYPE t
+        iv_minutes   TYPE i
+      EXPORTING
+        ev_found     TYPE abap_bool
+        ev_start     TYPE t
+        ev_end       TYPE t
+      RAISING
+        lcx_graph.
+
     "! "2026-11-10T09:00:00" (UTC) for an SAP date and time in IV_TIME_ZONE
     CLASS-METHODS to_utc
       IMPORTING
@@ -184,6 +247,14 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
     CLASS-METHODS utc_headers
       RETURNING
         value(rt_headers) TYPE tihttpnvp.
+
+    CLASS-METHODS add_recurrence
+      IMPORTING
+        io_writer TYPE REF TO lcl_graph_json_writer
+        is_event  TYPE lif_graph_calendar=>ty_event
+        iv_start  TYPE string
+      RAISING
+        lcx_graph.
 ENDCLASS.
 
 
@@ -347,8 +418,87 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     IF is_event-transaction_id IS NOT INITIAL.
       lo_writer->add_string( iv_name = `transactionId` iv_value = is_event-transaction_id ).
     ENDIF.
+    IF is_event-teams_meeting = abap_true.
+      lo_writer->add_boolean( iv_name = `isOnlineMeeting` iv_value = abap_true ).
+      lo_writer->add_string( iv_name = `onlineMeetingProvider` iv_value = `teamsForBusiness` ).
+    ENDIF.
+    IF is_event-repeat IS NOT INITIAL.
+      add_recurrence( io_writer = lo_writer is_event = is_event iv_start = lv_start ).
+    ENDIF.
     lo_writer->end_object( ).
     rv_json = lo_writer->result( ).
+  ENDMETHOD.
+
+
+  METHOD add_recurrence.
+    DATA lv_repeat TYPE string.
+    DATA lv_text TYPE string.
+    DATA lv_first TYPE d.
+    DATA lv_first_text TYPE string.
+    DATA lv_until TYPE string.
+    DATA lv_every TYPE i.
+    DATA lv_weekday TYPE i.
+    DATA lv_day TYPE i.
+    DATA lt_days TYPE lif_graph_calendar=>ty_addresses.
+    DATA lv_name TYPE string.
+    DATA lv_monday TYPE d VALUE '19000101'.
+
+    lv_repeat = is_event-repeat.
+    TRANSLATE lv_repeat TO LOWER CASE.
+    CONDENSE lv_repeat NO-GAPS.
+    lv_every = is_event-repeat_every.
+    IF lv_every <= 0.
+      lv_every = 1.
+    ENDIF.
+    " The series starts on the day of the first start, as Microsoft keeps it (UTC)
+    lv_first_text = iv_start(10).
+    CONCATENATE iv_start(4) iv_start+5(2) iv_start+8(2) INTO lv_first.
+
+    io_writer->begin_object( `recurrence` ).
+    io_writer->begin_object( `pattern` ).
+    CASE lv_repeat.
+      WHEN `daily`.
+        io_writer->add_string( iv_name = `type` iv_value = `daily` ).
+        io_writer->add_number( iv_name = `interval` iv_value = lv_every ).
+      WHEN `weekly`.
+        io_writer->add_string( iv_name = `type` iv_value = `weekly` ).
+        io_writer->add_number( iv_name = `interval` iv_value = lv_every ).
+        " 1 January 1900 was a Monday
+        lv_weekday = ( lv_first - lv_monday ) MOD 7.
+        SPLIT `monday,tuesday,wednesday,thursday,friday,saturday,sunday` AT ',' INTO TABLE lt_days.
+        lv_weekday = lv_weekday + 1.
+        READ TABLE lt_days INDEX lv_weekday INTO lv_name.
+        io_writer->begin_array( `daysOfWeek` ).
+        io_writer->add_string( iv_value = lv_name ).
+        io_writer->end_array( ).
+      WHEN `monthly`.
+        io_writer->add_string( iv_name = `type` iv_value = `absoluteMonthly` ).
+        io_writer->add_number( iv_name = `interval` iv_value = lv_every ).
+        lv_day = lv_first+6(2).
+        io_writer->add_number( iv_name = `dayOfMonth` iv_value = lv_day ).
+      WHEN OTHERS.
+        CONCATENATE `Unknown repeat "` is_event-repeat `"; use daily, weekly or monthly.` INTO lv_text.
+        RAISE EXCEPTION TYPE lcx_graph
+          EXPORTING
+            text = lv_text.
+    ENDCASE.
+    io_writer->end_object( ).
+    io_writer->begin_object( `range` ).
+    IF is_event-repeat_until IS NOT INITIAL.
+      CONCATENATE is_event-repeat_until(4) `-` is_event-repeat_until+4(2) `-` is_event-repeat_until+6(2) INTO lv_until.
+      io_writer->add_string( iv_name = `type` iv_value = `endDate` ).
+      io_writer->add_string( iv_name = `startDate` iv_value = lv_first_text ).
+      io_writer->add_string( iv_name = `endDate` iv_value = lv_until ).
+    ELSEIF is_event-repeat_times > 0.
+      io_writer->add_string( iv_name = `type` iv_value = `numbered` ).
+      io_writer->add_string( iv_name = `startDate` iv_value = lv_first_text ).
+      io_writer->add_number( iv_name = `numberOfOccurrences` iv_value = is_event-repeat_times ).
+    ELSE.
+      io_writer->add_string( iv_name = `type` iv_value = `noEnd` ).
+      io_writer->add_string( iv_name = `startDate` iv_value = lv_first_text ).
+    ENDIF.
+    io_writer->end_object( ).
+    io_writer->end_object( ).
   ENDMETHOD.
 
 
@@ -361,6 +511,7 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     DATA lv_prefix TYPE string.
     DATA lv_type TYPE string.
     DATA lv_address TYPE string.
+    DATA ls_response TYPE lif_graph_calendar=>ty_response.
 
     CONCATENATE iv_prefix `id` INTO lv_field.
     rs_event-id = io_json->get( lv_field ).
@@ -406,6 +557,13 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     rs_event-web_link = io_json->get( lv_field ).
     CONCATENATE iv_prefix `transactionId` INTO lv_field.
     rs_event-transaction_id = io_json->get( lv_field ).
+    CONCATENATE iv_prefix `isOnlineMeeting` INTO lv_field.
+    lv_value = io_json->get( lv_field ).
+    IF lv_value = `true`.
+      rs_event-teams_meeting = abap_true.
+    ENDIF.
+    CONCATENATE iv_prefix `onlineMeeting/joinUrl` INTO lv_field.
+    rs_event-join_url = io_json->get( lv_field ).
 
     CONCATENATE iv_prefix `attendees` INTO lv_field.
     lv_count = io_json->count( lv_field ).
@@ -422,6 +580,10 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
       ELSE.
         APPEND lv_address TO rs_event-attendees.
       ENDIF.
+      ls_response-address = lv_address.
+      CONCATENATE lv_prefix `status/response` INTO lv_field.
+      ls_response-response = io_json->get( lv_field ).
+      APPEND ls_response TO rs_event-responses.
     ENDDO.
     CONCATENATE iv_prefix `categories` INTO lv_field.
     lv_count = io_json->count( lv_field ).
@@ -476,7 +638,7 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     lv_to = to_utc( iv_date = lv_day_after iv_time = lv_midnight iv_time_zone = mv_time_zone ).
     CONCATENATE `/calendarView?startDateTime=` lv_from `Z&endDateTime=` lv_to `Z`
                 `&$top=100&$orderby=start/dateTime`
-                `&$select=id,subject,bodyPreview,start,end,isAllDay,isCancelled,location,attendees,showAs,organizer,webLink,categories,transactionId`
+                `&$select=id,subject,bodyPreview,start,end,isAllDay,isCancelled,location,attendees,showAs,organizer,webLink,categories,transactionId,isOnlineMeeting,onlineMeeting`
       INTO lv_rest.
     lv_path = path( lv_rest ).
     lt_headers = utc_headers( ).
@@ -554,6 +716,114 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD free_busy.
+    DATA lo_writer TYPE REF TO lcl_graph_json_writer.
+    DATA lo_json TYPE REF TO lcl_graph_json.
+    DATA ls_free_busy TYPE lif_graph_calendar=>ty_free_busy.
+    DATA lv_address TYPE string.
+    DATA lv_json TYPE string.
+    DATA lv_path TYPE string.
+    DATA lv_start TYPE string.
+    DATA lv_end TYPE string.
+    DATA lv_count TYPE i.
+    DATA lv_index TYPE i.
+    DATA lv_number TYPE string.
+    DATA lv_prefix TYPE string.
+    DATA lv_field TYPE string.
+
+    lv_start = to_utc( iv_date = iv_date iv_time = iv_from iv_time_zone = mv_time_zone ).
+    lv_end = to_utc( iv_date = iv_date iv_time = iv_to iv_time_zone = mv_time_zone ).
+    CREATE OBJECT lo_writer.
+    lo_writer->begin_object( ).
+    lo_writer->begin_array( `schedules` ).
+    LOOP AT it_addresses INTO lv_address.
+      lv_address = lcl_graph_conv=>trim( lv_address ).
+      IF lv_address IS NOT INITIAL.
+        lo_writer->add_string( iv_value = lv_address ).
+      ENDIF.
+    ENDLOOP.
+    lo_writer->end_array( ).
+    add_time( io_writer = lo_writer iv_name = `startTime` iv_text = lv_start ).
+    add_time( io_writer = lo_writer iv_name = `endTime` iv_text = lv_end ).
+    lo_writer->add_number( iv_name = `availabilityViewInterval` iv_value = iv_interval ).
+    lo_writer->end_object( ).
+    lv_json = lo_writer->result( ).
+    lv_path = path( `/calendar/getSchedule` ).
+    " Reads only: a repeat after an error cannot do harm, but POST is not repeated
+    lo_json = mo_client->send_json( iv_method = 'POST' iv_path = lv_path iv_json = lv_json ).
+    lv_count = lo_json->count( `value` ).
+    DO lv_count TIMES.
+      lv_index = sy-index - 1.
+      lv_number = lcl_graph_conv=>num( lv_index ).
+      CONCATENATE `value/` lv_number `/` INTO lv_prefix.
+      CLEAR ls_free_busy.
+      CONCATENATE lv_prefix `scheduleId` INTO lv_field.
+      ls_free_busy-address = lo_json->get( lv_field ).
+      CONCATENATE lv_prefix `availabilityView` INTO lv_field.
+      ls_free_busy-view = lo_json->get( lv_field ).
+      CONCATENATE lv_prefix `error/message` INTO lv_field.
+      ls_free_busy-error = lo_json->get( lv_field ).
+      APPEND ls_free_busy TO rt_free_busy.
+    ENDDO.
+  ENDMETHOD.
+
+
+  METHOD find_free_time.
+    CONSTANTS lc_interval TYPE i VALUE 15.
+    DATA lt_free_busy TYPE lif_graph_calendar=>ty_free_busies.
+    DATA ls_free_busy TYPE lif_graph_calendar=>ty_free_busy.
+    DATA lv_text TYPE string.
+    DATA lv_slots TYPE i.
+    DATA lv_needed TYPE i.
+    DATA lv_slot TYPE i.
+    DATA lv_run TYPE i.
+    DATA lv_free TYPE abap_bool.
+    DATA lv_length TYPE i.
+    DATA lv_seconds TYPE i.
+
+    CLEAR: ev_found, ev_start, ev_end.
+    lt_free_busy = free_busy( it_addresses = it_addresses iv_date = iv_date
+                              iv_from = iv_from iv_to = iv_to iv_interval = lc_interval ).
+    LOOP AT lt_free_busy INTO ls_free_busy WHERE error IS NOT INITIAL.
+      CONCATENATE `No free/busy times for ` ls_free_busy-address `: ` ls_free_busy-error INTO lv_text.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = lv_text
+          hint = `Check the address; it must be a mailbox of the company.`.
+    ENDLOOP.
+    lv_seconds = iv_to - iv_from.
+    lv_slots = lv_seconds DIV ( lc_interval * 60 ).
+    lv_needed = ( iv_minutes + lc_interval - 1 ) DIV lc_interval.
+    IF lv_needed <= 0.
+      lv_needed = 1.
+    ENDIF.
+    " Slot by slot: free only when every view shows 0 there
+    DO lv_slots TIMES.
+      lv_slot = sy-index - 1.
+      lv_free = abap_true.
+      LOOP AT lt_free_busy INTO ls_free_busy.
+        lv_length = strlen( ls_free_busy-view ).
+        IF lv_slot >= lv_length OR ls_free_busy-view+lv_slot(1) <> '0'.
+          lv_free = abap_false.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+      IF lv_free = abap_true.
+        lv_run = lv_run + 1.
+      ELSE.
+        lv_run = 0.
+      ENDIF.
+      IF lv_run >= lv_needed.
+        ev_found = abap_true.
+        lv_slot = lv_slot - lv_needed + 1.
+        ev_start = iv_from + lv_slot * lc_interval * 60.
+        ev_end = ev_start + iv_minutes * 60.
+        RETURN.
+      ENDIF.
+    ENDDO.
+  ENDMETHOD.
+
+
   METHOD delete.
     DATA lv_id TYPE string.
     DATA lv_rest TYPE string.
@@ -587,6 +857,9 @@ CLASS ltc_graph_calendar DEFINITION FINAL FOR TESTING.
     METHODS end_before_start FOR TESTING.
     METHODS list_period FOR TESTING RAISING lcx_graph.
     METHODS cancel_event FOR TESTING RAISING lcx_graph.
+    METHODS teams_weekly_series FOR TESTING RAISING lcx_graph.
+    METHODS wrong_repeat FOR TESTING.
+    METHODS free_time FOR TESTING RAISING lcx_graph.
 
     METHODS request_at
       IMPORTING
@@ -749,6 +1022,81 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
     cl_aunit_assert=>assert_char_cp(
       act = ls_request-uri
       exp = '/v1.0/users/sap@contoso.com/calendarView?startDateTime=2026-10-31T21:00:00Z&endDateTime=2026-12-31T21:00:00Z&$top=100*' ).
+  ENDMETHOD.
+
+
+  METHOD teams_weekly_series.
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA ls_created TYPE lif_graph_calendar=>ty_event.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA ls_response TYPE lif_graph_calendar=>ty_response.
+    DATA lv_answer TYPE string.
+
+    ls_event-subject = `Haftalık üretim toplantısı`.
+    ls_event-start_date = '20261110'.
+    ls_event-start_time = '090000'.
+    ls_event-end_time = '093000'.
+    ls_event-teams_meeting = abap_true.
+    ls_event-repeat = `weekly`.
+    ls_event-repeat_until = '20261229'.
+    APPEND `derya@contoso.com` TO ls_event-attendees.
+    CONCATENATE `{"id":"E5","isOnlineMeeting":true,"onlineMeeting":{"joinUrl":"https://teams.microsoft.com/l/meetup-join/X"},`
+                `"start":{"dateTime":"2026-11-10T06:00:00.0000000"},"end":{"dateTime":"2026-11-10T06:30:00.0000000"},`
+                `"attendees":[{"type":"required","status":{"response":"none"},"emailAddress":{"address":"derya@contoso.com"}}]}` INTO lv_answer.
+    mo_http->answer( iv_status = 201 iv_body = lv_answer ).
+    ls_created = mo_cut->create( ls_event ).
+    cl_aunit_assert=>assert_equals( act = ls_created-teams_meeting exp = abap_true ).
+    cl_aunit_assert=>assert_equals( act = ls_created-join_url exp = `https://teams.microsoft.com/l/meetup-join/X` ).
+    READ TABLE ls_created-responses INDEX 1 INTO ls_response.
+    cl_aunit_assert=>assert_equals( act = ls_response-response exp = `none` ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_char_cp(
+      act = ls_request-body
+      exp = '*"isOnlineMeeting":true,"onlineMeetingProvider":"teamsForBusiness","recurrence":{"pattern":{"type":"weekly","interval":1,"daysOfWeek":["tuesday"]},"range":{"type":"endDate","startDate":"2026-11-10","endDate":"2026-12-29"}}}' ).
+  ENDMETHOD.
+
+
+  METHOD wrong_repeat.
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA lx_graph TYPE REF TO lcx_graph.
+
+    ls_event-subject = `Yanlış`.
+    ls_event-start_date = '20261110'.
+    ls_event-start_time = '090000'.
+    ls_event-end_time = '093000'.
+    ls_event-repeat = `yearly`.
+    TRY.
+        mo_cut->create( ls_event ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*Unknown repeat*' ).
+  ENDMETHOD.
+
+
+  METHOD free_time.
+    " Two people from 09:00 to 11:00 in steps of 15 minutes; 30 minutes wanted
+    DATA lt_addresses TYPE lif_graph_calendar=>ty_addresses.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_found TYPE abap_bool.
+    DATA lv_start TYPE t.
+    DATA lv_end TYPE t.
+
+    APPEND `derya@contoso.com` TO lt_addresses.
+    APPEND `ayse@contoso.com` TO lt_addresses.
+    mo_http->answer( iv_status = 200
+                     iv_body   = `{"value":[{"scheduleId":"derya@contoso.com","availabilityView":"00110000"},{"scheduleId":"ayse@contoso.com","availabilityView":"01000000"}]}` ).
+    mo_cut->find_free_time( EXPORTING it_addresses = lt_addresses iv_date = '20261110'
+                                      iv_from = '090000' iv_to = '110000' iv_minutes = 30
+                            IMPORTING ev_found = lv_found ev_start = lv_start ev_end = lv_end ).
+    cl_aunit_assert=>assert_equals( act = lv_found exp = abap_true ).
+    cl_aunit_assert=>assert_equals( act = lv_start exp = '100000' ).
+    cl_aunit_assert=>assert_equals( act = lv_end exp = '103000' ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/calendar/getSchedule` ).
+    cl_aunit_assert=>assert_char_cp(
+      act = ls_request-body
+      exp = '{"schedules":["derya@contoso.com","ayse@contoso.com"],"startTime":{"dateTime":"2026-11-10T06:00:00"*"availabilityViewInterval":15}' ).
   ENDMETHOD.
 
 
