@@ -436,7 +436,7 @@ ENDTRY.
 
 ## Excel çalışma kitapları
 
-> **Açık soru: kullanıcısız oturum.** Microsoft'un Excel çağrılarına ait başvuru sayfalarında (örneğin [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) ve [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) uygulama izinleri için **"Not supported"** yazıyor. Bu modül de diğerleri gibi uygulama olarak oturum açıyor. Gerçek bir tenant'ta denenene kadar Excel çağrılarının Microsoft'tan hata alacağını varsayın. Dosya modülüyle `.xlsx` dosyasını bütün olarak yükleme ve indirme bundan etkilenmez.
+> **Kullanıcısız oturum.** Microsoft'un Excel çağrılarına ait başvuru sayfalarında (örneğin [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) ve [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) uygulama izinleri için **"Not supported"** yazıyor. Bu modül de diğerleri gibi uygulama olarak oturum açıyor. Gerçek bir test tenant'ında programın bütün çağrıları çalıştı ([Neler doğrulandı](#neler-doğrulandı) bölümüne bakın), ama orada uygulamada geniş `Sites.FullControl.All` izni de vardı. Yalnız `Sites.Selected` ile çalışıp çalışmadıkları henüz bilinmiyor; Microsoft'un neye izin verdiği de değişebilir. Dosya modülüyle `.xlsx` dosyasını bütün olarak yükleme ve indirme bundan etkilenmez.
 
 SharePoint kitaplığında ya da OneDrive'da duran bir `.xlsx` dosyasının hücrelerini, dosyayı indirmeden okur ve yazar. Tipik kullanımlar:
 - iş biriminin SharePoint'te tuttuğu bir planlama ya da raporlama kitabını doldurmak;
@@ -454,7 +454,7 @@ Modülün iki nesnesi var: `ZCHE_GRAPH_EXCEL_LIB` include'u (sınıf `LCL_GRAPH_
 - **Yeniden hesaplama.**
 - **Oturum:** çok sayıda değişiklik yaparken kitabı açık tutar (`open_session` / `close_session`). Hem daha hızlıdır hem de iş birlikte kaydedilir.
 
-Yazarken sayı gibi görünen hücreler (`1234`, `-12.5`, `1e-3`) sayı olarak, `=` ile başlayan metinler formül olarak gider. `00123`, `+5` ve `2026-11-02` gibi tarihler metin kalır; böylece malzeme numaraları baştaki sıfırlarını korur. Diğerlerinden kısa bir satırın geri kalan hücreleri değişmeden kalır.
+Yazarken sayı gibi görünen hücreler (`1234`, `-12.5`, `1e-3`) sayı olarak, `=` ile başlayan metinler formül olarak gider. Diğer metinler, Excel'e `'00123` yazar gibi başlarında bir kesme işaretiyle gider. Böylece `00123`, `+5` ve `2026-11-02` gibi tarihler metin kalır, malzeme numaraları baştaki sıfırlarını korur. Excel kesme işaretini göstermez; okurken metin kesme işareti olmadan geri gelir. Diğerlerinden kısa bir satırın geri kalan hücreleri değişmeden kalır.
 
 Bu yolla yeni Excel dosyası oluşturulamıyor. Var olan bir kitapla başlayın; örneğin dosya modülüyle bir kez yüklediğiniz bir şablon.
 
@@ -522,16 +522,47 @@ ENDTRY.
 
 | Modül | İçerik | Durum |
 |---|---|---|
-| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5 |
-| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.5 |
-| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.5 |
-| SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.5 |
-| Excel çalışma kitapları | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, yukarıya bakın | v0.5 |
+| Çekirdek + bağlantı testi | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5.1 |
+| E-posta | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: gönderme ve okuma, yukarıya bakın | v0.5.1 |
+| SharePoint / OneDrive dosyaları | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, yukarıya bakın | v0.5.1 |
+| SharePoint listeleri | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, yukarıya bakın | v0.5.1 |
+| Excel çalışma kitapları | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, yukarıya bakın | v0.5.1 |
 | Entra ID kullanıcıları, takvim, Teams bildirimleri | | planlandı |
 
 ## Neler doğrulandı
 
-2 Kasım 2026'da, SAP ABAP Platform 2023 deneme sisteminde (SAP_BASIS 7.58):
+SAP ABAP Cloud Developer Trial 2025 sisteminde (SAP_BASIS 816).
+
+### Gerçek bir Microsoft 365 tenant'ında, 4 Kasım 2026
+
+Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM59'da; programlar seçim ekranlarından çalıştırıldı.
+
+> **Önce bunu okuyun:** uygulamada `Organization.Read.All` ve `Sites.Selected` (bir test sitesinde `write` yetkisiyle) dışında, testler sırasında geniş **`Sites.FullControl.All`** izni de vardı. Bu yüzden sonuçlar çağrıların çalıştığını gösterir. Yalnız `Sites.Selected`'ın yettiğini ya da başka sitelerin ve OneDrive'ların kapalı kaldığını **göstermez**.
+
+- **Bağlantı:** `ZCHE_GRAPH_CHECK` gerçek bir token aldı ve `GET /organization` çağrısını yaptı; tenant hem alan adı hem GUID olarak verildi. Var olmayan bir tenant `AADSTS90002` hatasını ve ipucunu verdi.
+- **Dosyalar:**
+  - klasör listeleme;
+  - kitaplığı adıyla bulma (`Belgeler`, *Documents*'ın Türkçe adı) ve ad yanlışsa kitaplıkları sayan hata;
+  - bir klasör yolunu iki kez oluşturma, kopya klasör olmadan;
+  - Türkçe harfli ve boşluklu klasör adı;
+  - bir spool talebini PDF olarak yükleme (4.791 bayt); `replace`, `rename` ve `fail` (HTTP 409);
+  - 6.291.456 baytlık bir dosyayı uygulama sunucusuna indirme, parça parça yeniden yükleme ve tekrar indirme: her seferinde aynı SHA-256.
+- **Listeler:**
+  - sitenin listeleri ve sütunları; "Müşteri Adı" için `M_x00fc__x015f_teriAd_x0131_` gibi iç adlar;
+  - seçilen sütunlar ve filtreyle okuma;
+  - metin, sayı, evet/hayır, tarih ve çoklu seçimle kayıt oluşturma;
+  - `12,5` değerini sayı olarak reddetme;
+  - bir kaydın tek alanını değiştirme;
+  - `Title` anahtarıyla, iki yönde de güncelle ya da oluştur.
+- **Excel, uygulama olarak oturum açarak:** sayfalar ve tablolar, aralığı değer ve gösterilen metin olarak okuma, değer ve formül yazma, tablo okuma, tabloya satır ekleme.
+
+Tenant'ta bulunup 0.5.1'de düzeltilenler:
+
+- **İndirme:** SharePoint, `$select` ile sorulunca `@microsoft.graph.downloadUrl` alanını döndürmüyor. Modül artık Microsoft'un [indirme sayfasındaki](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content) gibi `select` ile soruyor.
+- **Excel:** `00789` hücreye 789 olarak yazılıyordu, çünkü Excel metni elle yazılmış bir giriş gibi yorumluyor. Metinler artık başlarında kesme işaretiyle gidiyor.
+- **`ZCHE_GRAPH_CHECK`:** "Token'daki izinler:" sonrasındaki boşluk eksikti.
+
+### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
 
 - **Excel modülü:** aynı test dublörüyle 8 birim testi geçiyor. Kapsadıkları:
   - sütun harfleri (A, Z, AA, ZZ, AAA) ve blok adresleri;
@@ -583,17 +614,17 @@ ENDTRY.
   - `graph.microsoft.com`, çekirdeğin okuduğu yerde `request-id` bulunan bir `401 InvalidAuthenticationToken` cevabı verdi.
 
 **Henüz doğrulanmadı:**
-- **Gerçek bir token ve başarılı bir Graph çağrısı.** Microsoft 365 tenant'ı yoktu. Bu yüzden henüz gerçekten e-posta gönderilmedi ya da okunmadı; Microsoft'un cevapları yalnızca belgelerinden biliniyor.
+- **E-postanın Microsoft'ta denenmesi.** Henüz e-posta gönderilmedi ya da okunmadı. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
-- **Posta kutusu sınırlaması** (RBAC for Applications ya da application access policy).
-- **SharePoint:** `Sites.Selected` ile site yetkisi verme, gerçek yükleme ve indirme, SICF proxy üzerinden `*.sharepoint.com` yolu.
-- **Excel'in Microsoft'ta denenmesi:** yazılan her değeri (sayı, formül, `null`) Excel'in anlatıldığı gibi işlediği Microsoft'un belgelerinden alındı, gerçek bir kitapta denenmedi. Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.
-- **SharePoint listelerinin Microsoft'ta denenmesi:** çoklu seçim ve arama sütunlarının JSON biçimi Microsoft'un belgelerine göre yazıldı, gerçek bir listede denenmedi; tarihler metin olarak gönderiliyor.
+- **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
+- **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
+- **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.
+- **SharePoint listelerinin Microsoft'ta denenmesi:** arama (lookup) sütunları, kayıt silme.
 - **SAPscript / Smart Forms spool talepleri** (yalnızca bir ABAP listesi dönüştürüldü).
 - **Gerçek bir ABAP 7.00–7.02 sistemi.** Özellikle şunlar doğrulanmadı:
   - SM59'un kullanıcı ve şifre alanlarının 36 karakterlik client ID'yi ve 40 karakterlik secret'ı alıp almadığı;
   - kullanılan sınıfların (`CL_HTTP_CLIENT`, `CL_HTTP_UTILITY`, `CL_ABAP_CONV_IN_CE`, `CL_ABAP_TSTMP`) aynı şekilde çalışıp çalışmadığı.
-- **SAP GUI:** seçim ekranına bakılmadı, SE38'e yapıştırma denenmedi.
+- **SE38:** programlar ADT ile kuruldu; SE38'e yapıştırma denenmedi.
 - **Proxy ve gerçek STRUST kurulumu:** deneme sistemi Microsoft'un sertifikalarına zaten güveniyordu.
 
 ## Lisans

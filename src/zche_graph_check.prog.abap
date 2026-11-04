@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CHECK: test the connection from SAP to Microsoft Graph
-*& abap-graph 0.5.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: first the include ZCHE_GRAPH_CORE, then SE38, create
@@ -260,8 +260,9 @@ CLASS lcl_check IMPLEMENTATION.
       line( iv_status = 'NOTE' iv_text = lv_text ).
     ELSE.
       CONCATENATE LINES OF lt_roles INTO lv_roles SEPARATED BY `, `.
-      lv_text = lcl_text=>get( iv_en = 'Permissions in the token: ' iv_tr = 'Token''daki izinler: ' ).
-      CONCATENATE lv_text lv_roles INTO lv_text.
+      " A char literal loses its trailing blank, so the blank comes from SEPARATED BY
+      lv_text = lcl_text=>get( iv_en = 'Permissions in the token:' iv_tr = 'Token''daki izinler:' ).
+      CONCATENATE lv_text lv_roles INTO lv_text SEPARATED BY space.
       line( iv_status = 'OK' iv_text = lv_text ).
     ENDIF.
 
@@ -304,10 +305,10 @@ CLASS lcl_check IMPLEMENTATION.
     ENDIF.
     lt_names = lo_json->names( `` ).
     CONCATENATE LINES OF lt_names INTO lv_names SEPARATED BY `, `.
-    lv_en = 'Fields in the answer: '.
-    lv_tr = 'Cevaptaki alanlar: '.
+    lv_en = 'Fields in the answer:'.
+    lv_tr = 'Cevaptaki alanlar:'.
     lv_text = lcl_text=>get( iv_en = lv_en iv_tr = lv_tr ).
-    CONCATENATE lv_text lv_names INTO lv_text.
+    CONCATENATE lv_text lv_names INTO lv_text SEPARATED BY space.
     line( iv_status = '' iv_text = lv_text ).
   ENDMETHOD.
 

@@ -403,7 +403,7 @@ ENDTRY.
 
 ## Excel workbooks
 
-> **Open question: sign-in without a user.** Microsoft's reference pages for the Excel calls (for example [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) and [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) list application permissions as **"Not supported"**. This module signs in as an application, like the others. Until it has been tried on a real tenant, expect the Excel calls to fail with an error from Microsoft. Uploading and downloading whole `.xlsx` files with the files module is not affected.
+> **Sign-in without a user.** Microsoft's reference pages for the Excel calls (for example [Get Range](https://learn.microsoft.com/en-us/graph/api/range-get) and [Create TableRow](https://learn.microsoft.com/en-us/graph/api/table-post-rows)) list application permissions as **"Not supported"**. This module signs in as an application, like the others. On a real test tenant all the calls of the program worked (see [What has been verified](#what-has-been-verified)), but the application also had the broad permission `Sites.FullControl.All` there. Whether they work with `Sites.Selected` alone is not known yet, and Microsoft may change what it allows. Uploading and downloading whole `.xlsx` files with the files module is not affected.
 
 Read and write cells of an `.xlsx` file that is in a SharePoint library or a OneDrive, without downloading it. Typical uses:
 - fill a planning or reporting workbook that the business keeps in SharePoint;
@@ -421,7 +421,7 @@ The module consists of the include `ZCHE_GRAPH_EXCEL_LIB` (class `LCL_GRAPH_EXCE
 - **Recalculate** the workbook.
 - **Sessions:** keep the workbook open while you make many changes (`open_session` / `close_session`). This is faster, and the work is saved together.
 
-When writing, a cell that looks like a number (`1234`, `-12.5`, `1e-3`) goes as a number. A text starting with `=` is a formula. `00123`, `+5` and dates like `2026-11-02` stay text, so material numbers keep their leading zeros. A row shorter than the others leaves the rest of its cells unchanged.
+When writing, a cell that looks like a number (`1234`, `-12.5`, `1e-3`) goes as a number. A text starting with `=` is a formula. Any other text goes with a leading apostrophe, as you would type `'00123` in Excel. So `00123`, `+5` and dates like `2026-11-02` stay text, and material numbers keep their leading zeros. Excel does not show the apostrophe, and reading gives the text back without it. A row shorter than the others leaves the rest of its cells unchanged.
 
 Excel cannot create a new file this way. Start from a workbook that exists, for example a template you uploaded once with the files module.
 
@@ -485,16 +485,47 @@ ENDTRY.
 
 | Module | Content | Status |
 |---|---|---|
-| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5 |
-| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.5 |
-| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.5 |
-| SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.5 |
-| Excel workbooks | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, see above | v0.5 |
+| Core + connection test | `ZCHE_GRAPH_CORE`, `ZCHE_GRAPH_CHECK` | v0.5.1 |
+| E-mail | `ZCHE_GRAPH_MAIL_LIB`, `ZCHE_GRAPH_MAIL`: sending and reading, see above | v0.5.1 |
+| SharePoint / OneDrive files | `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_FILES`, see above | v0.5.1 |
+| SharePoint lists | `ZCHE_GRAPH_LISTS_LIB`, `ZCHE_GRAPH_LISTS`, see above | v0.5.1 |
+| Excel workbooks | `ZCHE_GRAPH_EXCEL_LIB`, `ZCHE_GRAPH_EXCEL`, see above | v0.5.1 |
 | Entra ID users, calendar, Teams notifications | | planned |
 
 ## What has been verified
 
-On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
+On an SAP ABAP Cloud Developer Trial 2025 (SAP_BASIS 816).
+
+### Against a real Microsoft 365 tenant, 4 November 2026
+
+A Microsoft 365 Business Basic test tenant, one app registration, the secret in SM59, the programs run from their selection screens.
+
+> **Read this first:** besides `Organization.Read.All` and `Sites.Selected` (with `write` granted on one test site), the application also had **`Sites.FullControl.All`** during these tests. So the results show that the calls work. They do **not** show that `Sites.Selected` alone is enough, or that other sites and OneDrives stay closed.
+
+- **Connection:** `ZCHE_GRAPH_CHECK` got a real token and called `GET /organization`, with the tenant given as domain and as GUID. A tenant that does not exist gave `AADSTS90002` and the hint.
+- **Files:**
+  - listing a folder;
+  - a library by its name (`Belgeler`, the Turkish name of *Documents*), and the error that lists the libraries when the name is wrong;
+  - creating a folder path twice, without a duplicate folder;
+  - a folder name with Turkish letters and spaces;
+  - a spool request uploaded as PDF (4,791 bytes) with `replace`, `rename` and `fail` (HTTP 409);
+  - a file of 6,291,456 bytes downloaded to the application server, uploaded again in pieces and downloaded once more: the same SHA-256 every time.
+- **Lists:**
+  - lists and columns of a site, with internal names such as `M_x00fc__x015f_teriAd_x0131_` for "Müşteri Adı";
+  - reading with chosen columns and a filter;
+  - creating an item with text, number, yes/no, date and multiple choice;
+  - refusing `12,5` as a number;
+  - changing one field of an item;
+  - update-or-create by `Title`, in both directions.
+- **Excel, signed in as an application:** sheets and tables, reading a range as values and as shown text, writing values and a formula, reading a table, adding a row.
+
+Found on the tenant and fixed in 0.5.1:
+
+- **Download:** SharePoint leaves `@microsoft.graph.downloadUrl` out when asked with `$select`. The module now asks with `select`, as Microsoft's [download page](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content) shows.
+- **Excel:** `00789` arrived as 789, because Excel takes a text like a typed entry. Texts now go with a leading apostrophe.
+- **`ZCHE_GRAPH_CHECK`:** the blank after "Permissions in the token:" was missing.
+
+### Unit tests and made-up credentials, 2 November 2026
 
 - **Excel module:** 8 unit tests pass with the same test double, covering:
   - column letters (A, Z, AA, ZZ, AAA) and block addresses;
@@ -547,17 +578,17 @@ On an SAP ABAP Platform 2023 trial (SAP_BASIS 7.58), 2 November 2026:
 
 **Not verified yet:**
 
-- **A real token and a successful Graph call.** No Microsoft 365 tenant was available. So no mail has actually been sent or read; Microsoft's answers are known only from its documentation.
+- **E-mail against Microsoft.** No mail has been sent or read yet. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
-- **Mailbox restriction** (RBAC for Applications or an application access policy).
-- **SharePoint:** granting a site with `Sites.Selected`, real uploads and downloads, and the route to `*.sharepoint.com` through the SICF proxy.
-- **Excel against Microsoft:** whether Excel treats every written value as described (numbers, formulas, `null`) was taken from Microsoft's documentation, not tried on a real workbook. Large blocks may hit Microsoft's request size limits.
-- **SharePoint lists against Microsoft:** the JSON forms for multiple choice and lookup columns follow Microsoft's documentation and were not tried against a real list; dates are passed as text.
+- **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
+- **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
+- **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.
+- **SharePoint lists against Microsoft:** lookup columns, deleting items.
 - **SAPscript / Smart Forms spool requests** (only an ABAP list was converted).
 - **A real ABAP 7.00–7.02 system.** In particular, it is not verified that:
   - the SM59 user and password fields take a 36-character client ID and a 40-character secret;
   - the classes used (`CL_HTTP_CLIENT`, `CL_HTTP_UTILITY`, `CL_ABAP_CONV_IN_CE`, `CL_ABAP_TSTMP`) behave the same.
-- **SAP GUI:** the selection screen was not looked at, and pasting in SE38 was not tried.
+- **SE38:** the programs were installed through ADT; pasting them in SE38 was not tried.
 - **Proxy and real STRUST setup:** the trial already trusted Microsoft's certificates.
 
 ## License

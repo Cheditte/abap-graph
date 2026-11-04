@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL_LIB: Excel workbooks in SharePoint or OneDrive
 *& through Microsoft Graph (INCLUDE)
-*& abap-graph 0.5.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.5.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_EXCEL_LIB with type "Include
@@ -131,9 +131,10 @@ CLASS lcl_graph_excel DEFINITION FINAL.
         lcx_graph.
 
     "! Writes the rows from IV_START on. Cells that look like numbers are written
-    "! as numbers (IV_NUMBERS = X), texts starting with = as formulas; numbers
-    "! with leading zeros such as 00123 stay text. Shorter rows leave the rest
-    "! of the block unchanged.
+    "! as numbers (IV_NUMBERS = X), texts starting with = as formulas. Other texts
+    "! go with a leading apostrophe, so 00123 or 2026-11-02 stay text; Excel
+    "! does not show it and reading gives the text back without it. Shorter rows
+    "! leave the rest of the block unchanged.
     METHODS write_range
       IMPORTING
         iv_sheet          TYPE string
@@ -473,6 +474,11 @@ CLASS lcl_graph_excel IMPLEMENTATION.
         IF lv_number = abap_true.
           io_writer->add_raw( iv_json = lv_cell ).
         ELSE.
+          " Excel takes a text like a typed entry: 00123 would become 123 and
+          " 2026-11-02 a date. A leading apostrophe keeps it text, as in Excel
+          IF lv_cell IS NOT INITIAL AND lv_cell(1) <> '='.
+            CONCATENATE `'` lv_cell INTO lv_cell.
+          ENDIF.
           io_writer->add_string( iv_value = lv_cell ).
         ENDIF.
       ENDLOOP.
@@ -985,9 +991,10 @@ CLASS ltc_graph_excel IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = ls_request-method exp = `PATCH` ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri
                                     exp = `/v1.0/drives/D1/items/X1/workbook/worksheets('Data')/range(address='B2:D5')` ).
-    " 00123, a date and +5 stay text; 5, -12.50 and 1e-3 are numbers; a short row is filled with null
-    CONCATENATE `{"values":[["Material","Quantity","Price"],["00123",5,-12.50],["=SUM(B2:B3)",null,null],`
-                `["2026-11-02",1e-3,"+5"]]}` INTO lv_expected.
+    " Texts get an apostrophe, so 00123, a date and +5 stay text; 5, -12.50 and 1e-3
+    " are numbers; a formula goes as it is; a short row is filled with null
+    CONCATENATE `{"values":[["'Material","'Quantity","'Price"],["'00123",5,-12.50],["=SUM(B2:B3)",null,null],`
+                `["'2026-11-02",1e-3,"'+5"]]}` INTO lv_expected.
     cl_aunit_assert=>assert_equals( act = ls_request-body exp = lv_expected ).
   ENDMETHOD.
 
