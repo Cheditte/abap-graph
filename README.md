@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** runs on ECC 6.0 and later, S/4HANA included.
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.5, not released.** The core, the connection test and the e-mail, files, lists and Excel modules work on an SAP ABAP Platform 2023 trial with a test double and up to Microsoft's sign-in, but no call has been made with a real Microsoft 365 tenant yet (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.5.1, not released.** The core, the connection test and the e-mail, files, lists and Excel modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -496,11 +496,13 @@ ENDTRY.
 
 On an SAP ABAP Cloud Developer Trial 2025 (SAP_BASIS 816).
 
-### Against a real Microsoft 365 tenant, 4 November 2026
+### Against a real Microsoft 365 tenant, 4 and 5 November 2026
 
 A Microsoft 365 Business Basic test tenant, one app registration, the secret in SM59, the programs run from their selection screens.
 
-> **Read this first:** besides `Organization.Read.All` and `Sites.Selected` (with `write` granted on one test site), the application also had **`Sites.FullControl.All`** during these tests. So the results show that the calls work. They do **not** show that `Sites.Selected` alone is enough, or that other sites and OneDrives stay closed.
+> **Read this first:** besides `Organization.Read.All` and `Sites.Selected` (with `write` granted on one test site), the application also had **`Sites.FullControl.All`** during these tests. So the results show that the calls work. They do **not** show that `Sites.Selected` alone is enough, or that other sites and OneDrives stay closed. For e-mail, the application had `Mail.Send` and `Mail.ReadWrite` for the whole tenant, without the mailbox restriction described above.
+
+![ZCHE_GRAPH_CHECK on the test tenant](docs/img/check-connection.png)
 
 - **Connection:** `ZCHE_GRAPH_CHECK` got a real token and called `GET /organization`, with the tenant given as domain and as GUID. A tenant that does not exist gave `AADSTS90002` and the hint.
 - **Files:**
@@ -518,11 +520,16 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
   - changing one field of an item;
   - update-or-create by `Title`, in both directions.
 - **Excel, signed in as an application:** sheets and tables, reading a range as values and as shown text, writing values and a formula, reading a table, adding a row.
+- **E-mail:** `ZCHE_GRAPH_MAIL` sent a short text mail from a shared mailbox to itself, then listed the unread mails of its inbox, with that mail in it.
+
+![The test mail, read back from SAP](docs/img/mail-read.png)
 
 Found on the tenant and fixed in 0.5.1:
 
 - **Download:** SharePoint leaves `@microsoft.graph.downloadUrl` out when asked with `$select`. The module now asks with `select`, as Microsoft's [download page](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content) shows.
 - **Excel:** `00789` arrived as 789, because Excel takes a text like a typed entry. Texts now go with a leading apostrophe.
+
+  ![00789 in E2 after 0.5.1](docs/img/excel-leading-zero.png)
 - **`ZCHE_GRAPH_CHECK`:** the blank after "Permissions in the token:" was missing.
 
 ### Unit tests and made-up credentials, 2 November 2026
@@ -578,7 +585,7 @@ Found on the tenant and fixed in 0.5.1:
 
 **Not verified yet:**
 
-- **E-mail against Microsoft.** No mail has been sent or read yet. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
+- **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.

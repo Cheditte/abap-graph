@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrasında çalışır, S/4HANA dahil.
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.5, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste ve Excel modülleri SAP ABAP Platform 2023 deneme sisteminde, test dublörüyle ve Microsoft'un giriş adımına kadar çalışıyor. Ama gerçek bir Microsoft 365 tenant'ıyla henüz çağrı yapılmadı (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.5.1, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste ve Excel modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -533,11 +533,13 @@ ENDTRY.
 
 SAP ABAP Cloud Developer Trial 2025 sisteminde (SAP_BASIS 816).
 
-### Gerçek bir Microsoft 365 tenant'ında, 4 Kasım 2026
+### Gerçek bir Microsoft 365 tenant'ında, 4 ve 5 Kasım 2026
 
 Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM59'da; programlar seçim ekranlarından çalıştırıldı.
 
-> **Önce bunu okuyun:** uygulamada `Organization.Read.All` ve `Sites.Selected` (bir test sitesinde `write` yetkisiyle) dışında, testler sırasında geniş **`Sites.FullControl.All`** izni de vardı. Bu yüzden sonuçlar çağrıların çalıştığını gösterir. Yalnız `Sites.Selected`'ın yettiğini ya da başka sitelerin ve OneDrive'ların kapalı kaldığını **göstermez**.
+> **Önce bunu okuyun:** uygulamada `Organization.Read.All` ve `Sites.Selected` (bir test sitesinde `write` yetkisiyle) dışında, testler sırasında geniş **`Sites.FullControl.All`** izni de vardı. Bu yüzden sonuçlar çağrıların çalıştığını gösterir. Yalnız `Sites.Selected`'ın yettiğini ya da başka sitelerin ve OneDrive'ların kapalı kaldığını **göstermez**. E-posta için uygulamada tüm tenant'ı kapsayan `Mail.Send` ve `Mail.ReadWrite` vardı; yukarıda anlatılan posta kutusu sınırlaması yoktu.
+
+![Test tenant'ında ZCHE_GRAPH_CHECK](docs/img/check-connection.png)
 
 - **Bağlantı:** `ZCHE_GRAPH_CHECK` gerçek bir token aldı ve `GET /organization` çağrısını yaptı; tenant hem alan adı hem GUID olarak verildi. Var olmayan bir tenant `AADSTS90002` hatasını ve ipucunu verdi.
 - **Dosyalar:**
@@ -555,11 +557,16 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
   - bir kaydın tek alanını değiştirme;
   - `Title` anahtarıyla, iki yönde de güncelle ya da oluştur.
 - **Excel, uygulama olarak oturum açarak:** sayfalar ve tablolar, aralığı değer ve gösterilen metin olarak okuma, değer ve formül yazma, tablo okuma, tabloya satır ekleme.
+- **E-posta:** `ZCHE_GRAPH_MAIL` paylaşılan bir posta kutusundan kendisine kısa bir metin e-postası gönderdi, sonra gelen kutusundaki okunmamış e-postaları listeledi; gönderilen e-posta listedeydi.
+
+![Test e-postası, SAP'den geri okunurken](docs/img/mail-read.png)
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
 - **İndirme:** SharePoint, `$select` ile sorulunca `@microsoft.graph.downloadUrl` alanını döndürmüyor. Modül artık Microsoft'un [indirme sayfasındaki](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content) gibi `select` ile soruyor.
 - **Excel:** `00789` hücreye 789 olarak yazılıyordu, çünkü Excel metni elle yazılmış bir giriş gibi yorumluyor. Metinler artık başlarında kesme işaretiyle gidiyor.
+
+  ![0.5.1 sonrası E2'de 00789](docs/img/excel-leading-zero.png)
 - **`ZCHE_GRAPH_CHECK`:** "Token'daki izinler:" sonrasındaki boşluk eksikti.
 
 ### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
@@ -614,7 +621,7 @@ Tenant'ta bulunup 0.5.1'de düzeltilenler:
   - `graph.microsoft.com`, çekirdeğin okuduğu yerde `request-id` bulunan bir `401 InvalidAuthenticationToken` cevabı verdi.
 
 **Henüz doğrulanmadı:**
-- **E-postanın Microsoft'ta denenmesi.** Henüz e-posta gönderilmedi ya da okunmadı. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
+- **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
