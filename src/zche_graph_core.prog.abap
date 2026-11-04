@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,7 +30,7 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.7.0`.
+  CONSTANTS version TYPE string VALUE `0.7.1`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
@@ -207,7 +207,12 @@ CLASS lcl_graph_conv IMPLEMENTATION.
     IF iv_bytes IS INITIAL.
       RETURN.
     ENDIF.
-    lo_conv = cl_abap_conv_in_ce=>create( encoding = 'UTF-8' input = iv_bytes ).
+    " A byte that is no UTF-8 (a proxy's error page in Windows-1252), or a
+    " character this system cannot hold, becomes # instead of a short dump
+    lo_conv = cl_abap_conv_in_ce=>create( encoding    = 'UTF-8'
+                                          input       = iv_bytes
+                                          replacement = '#'
+                                          ignore_cerr = abap_true ).
     lo_conv->read( IMPORTING data = rv_text ).
   ENDMETHOD.
 
@@ -239,9 +244,15 @@ CLASS lcl_graph_conv IMPLEMENTATION.
 
 
   METHOD num.
+    " WRITE puts the minus sign behind the number (5-); JSON wants it in front
     DATA lv_text TYPE c LENGTH 12.
-    WRITE iv_number TO lv_text LEFT-JUSTIFIED NO-GROUPING.
+    DATA lv_number TYPE i.
+    lv_number = abs( iv_number ).
+    WRITE lv_number TO lv_text LEFT-JUSTIFIED NO-GROUPING.
     rv_text = lv_text.
+    IF iv_number < 0.
+      CONCATENATE '-' rv_text INTO rv_text.
+    ENDIF.
   ENDMETHOD.
 
 
@@ -744,7 +755,10 @@ CLASS lcl_graph_json IMPLEMENTATION.
       IF sy-subrc <> 0.
         syntax_error( `unterminated string` ).
       ENDIF.
-      FIND '\' IN SECTION OFFSET mv_position OF mv_text MATCH OFFSET lv_backslash.
+      " Only up to the quote: searching the whole rest of the text for every
+      " string makes a large page slow, as most pages hold no backslash at all
+      lv_length = lv_quote - mv_position.
+      FIND '\' IN SECTION OFFSET mv_position LENGTH lv_length OF mv_text MATCH OFFSET lv_backslash.
       IF sy-subrc <> 0.
         lv_backslash = -1.
       ENDIF.
@@ -2166,6 +2180,9 @@ CLASS ltc_graph_json DEFINITION FINAL FOR TESTING.
     METHODS writer_escapes FOR TESTING.
     METHODS control_characters FOR TESTING RAISING lcx_graph.
     METHODS json_numbers FOR TESTING.
+    METHODS negative_number FOR TESTING.
+    METHODS bytes_not_utf8 FOR TESTING.
+    METHODS backslash_after_quote FOR TESTING RAISING lcx_graph.
 ENDCLASS.
 
 
@@ -2344,6 +2361,41 @@ CLASS ltc_graph_json IMPLEMENTATION.
     lv_value = lo_json->get( `v` ).
     lv_length = strlen( lv_value ).
     cl_aunit_assert=>assert_equals( act = lv_length exp = 5 ).
+  ENDMETHOD.
+
+
+  METHOD negative_number.
+    DATA lo_writer TYPE REF TO lcl_graph_json_writer.
+    DATA lv_json TYPE string.
+    CREATE OBJECT lo_writer.
+    lo_writer->begin_object( ).
+    lo_writer->add_number( iv_name = `n` iv_value = -5 ).
+    lo_writer->add_number( iv_name = `z` iv_value = 0 ).
+    lo_writer->end_object( ).
+    lv_json = lo_writer->result( ).
+    cl_aunit_assert=>assert_equals( act = lv_json exp = `{"n":-5,"z":0}` ).
+  ENDMETHOD.
+
+
+  METHOD bytes_not_utf8.
+    " "Erreur" with a Windows-1252 e acute (E9), as a proxy's error page may send it
+    DATA lv_bytes TYPE xstring.
+    DATA lv_text TYPE string.
+    lv_bytes = '457272E975722035303220'.
+    lv_text = lcl_graph_conv=>from_utf8( lv_bytes ).
+    cl_aunit_assert=>assert_char_cp( act = lv_text exp = 'Err*502*' ).
+  ENDMETHOD.
+
+
+  METHOD backslash_after_quote.
+    " The backslash of the second value must not be taken for one in the first
+    DATA lo_json TYPE REF TO lcl_graph_json.
+    DATA lv_value TYPE string.
+    lo_json = lcl_graph_json=>parse( `{"a":"x","b":"y\"z"}` ).
+    lv_value = lo_json->get( `a` ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `x` ).
+    lv_value = lo_json->get( `b` ).
+    cl_aunit_assert=>assert_equals( act = lv_value exp = `y"z` ).
   ENDMETHOD.
 
 

@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR_LIB: Outlook calendar through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CALENDAR_LIB with type
@@ -195,7 +195,9 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
         iv_time        TYPE t
         iv_time_zone   TYPE timezone
       RETURNING
-        value(rv_text) TYPE string.
+        value(rv_text) TYPE string
+      RAISING
+        lcx_graph.
 
     "! "2026-11-10T09:00:00.0000000" (UTC) -> SAP date and time in IV_TIME_ZONE
     CLASS-METHODS from_utc
@@ -204,7 +206,9 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
         iv_time_zone TYPE timezone
       EXPORTING
         ev_date      TYPE d
-        ev_time      TYPE t.
+        ev_time      TYPE t
+      RAISING
+        lcx_graph.
 
   PRIVATE SECTION.
     DATA mo_client TYPE REF TO lcl_graph_client.
@@ -230,7 +234,16 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
         io_json         TYPE REF TO lcl_graph_json
         iv_prefix       TYPE string
       RETURNING
-        value(rs_event) TYPE lif_graph_calendar=>ty_event.
+        value(rs_event) TYPE lif_graph_calendar=>ty_event
+      RAISING
+        lcx_graph.
+
+    "! Raises the error for a time zone SAP cannot convert in
+    CLASS-METHODS time_zone_error
+      IMPORTING
+        iv_time_zone TYPE timezone
+      RAISING
+        lcx_graph.
 
     CLASS-METHODS add_attendees
       IMPORTING
@@ -291,7 +304,14 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     DATA lv_time TYPE t.
     DATA lv_utc TYPE timezone VALUE 'UTC'.
 
+    " An empty time zone would silently mean UTC; 4 = a summer time hour, still converted
+    IF iv_time_zone IS INITIAL.
+      time_zone_error( iv_time_zone ).
+    ENDIF.
     CONVERT DATE iv_date TIME iv_time INTO TIME STAMP lv_stamp TIME ZONE iv_time_zone.
+    IF sy-subrc > 4.
+      time_zone_error( iv_time_zone ).
+    ENDIF.
     CONVERT TIME STAMP lv_stamp TIME ZONE lv_utc INTO DATE lv_date TIME lv_time.
     CONCATENATE lv_date(4) `-` lv_date+4(2) `-` lv_date+6(2) `T`
                 lv_time(2) `:` lv_time+2(2) `:` lv_time+4(2) INTO rv_text.
@@ -310,8 +330,28 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     ENDIF.
     CONCATENATE iv_text(4) iv_text+5(2) iv_text+8(2) INTO lv_date.
     CONCATENATE iv_text+11(2) iv_text+14(2) iv_text+17(2) INTO lv_time.
+    IF iv_time_zone IS INITIAL.
+      time_zone_error( iv_time_zone ).
+    ENDIF.
     CONVERT DATE lv_date TIME lv_time INTO TIME STAMP lv_stamp TIME ZONE lv_utc.
     CONVERT TIME STAMP lv_stamp TIME ZONE iv_time_zone INTO DATE ev_date TIME ev_time.
+    IF sy-subrc > 4.
+      time_zone_error( iv_time_zone ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD time_zone_error.
+    DATA lv_text TYPE string.
+    IF iv_time_zone IS INITIAL.
+      lv_text = `No SAP time zone: none was given, and the user has none in SU01.`.
+    ELSE.
+      CONCATENATE `SAP cannot convert dates and times in time zone "` iv_time_zone `".` INTO lv_text.
+    ENDIF.
+    RAISE EXCEPTION TYPE lcx_graph
+      EXPORTING
+        text = lv_text
+        hint = `Give an SAP time zone from table TTZZ (for example CET, TURKEY or UTC), or set one for the user in SU01 (Defaults).`.
   ENDMETHOD.
 
 
@@ -851,7 +891,8 @@ CLASS ltc_graph_calendar DEFINITION FINAL FOR TESTING.
     DATA mo_cut TYPE REF TO lcl_graph_calendar.
 
     METHODS setup.
-    METHODS utc_both_ways FOR TESTING.
+    METHODS utc_both_ways FOR TESTING RAISING lcx_graph.
+    METHODS unknown_time_zone FOR TESTING.
     METHODS create_event FOR TESTING RAISING lcx_graph.
     METHODS create_all_day FOR TESTING RAISING lcx_graph.
     METHODS end_before_start FOR TESTING.
@@ -912,6 +953,25 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
                                   IMPORTING ev_date = lv_date ev_time = lv_time ).
     cl_aunit_assert=>assert_equals( act = lv_date exp = '20261110' ).
     cl_aunit_assert=>assert_equals( act = lv_time exp = '013000' ).
+  ENDMETHOD.
+
+
+  METHOD unknown_time_zone.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_text TYPE string.
+
+    TRY.
+        lv_text = lcl_graph_calendar=>to_utc( iv_date = '20261110' iv_time = '090000' iv_time_zone = 'NOZONE' ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `an unknown time zone gave a time` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*time zone "NOZONE"*' ).
+    CLEAR lx_graph.
+    TRY.
+        lv_text = lcl_graph_calendar=>to_utc( iv_date = '20261110' iv_time = '090000' iv_time_zone = '' ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `an empty time zone was taken as UTC` ).
   ENDMETHOD.
 
 

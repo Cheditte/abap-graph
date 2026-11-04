@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.7.0, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.1, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -754,6 +754,18 @@ Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
   ![0.5.1 sonrası E2'de 00789](docs/img/excel-leading-zero.png)
 - **`ZCHE_GRAPH_CHECK`:** "Token'daki izinler:" sonrasındaki boşluk eksikti.
+
+Kod incelemesinde bulunup 0.7.1'de düzeltilenler:
+
+- UTF-8 olmayan bir cevap (proxy'nin hata sayfası) kısa dump veriyordu; artık normal hata veriyor.
+- Büyük cevaplar yavaş okunuyordu: JSON okuyucu her metin için metnin bütün kalanında ters bölü arıyordu.
+- Arka plan işinde iş günlüğü hatanın yerine ipucu ya da request-id satırını gösteriyordu.
+- SAP'nin tanımadığı bir saat dilimi ya da boş saat dilimi yanlış saat üretiyordu; artık bunu söyleyen bir hata veriyor.
+- `"Kaya, Derya" <derya@b.com>` virgülden iki alıcıya bölünüyordu.
+- Değeri nesne olan liste alanları (bağlantı, konum, tek kişi) kayıtta yer almıyordu.
+- Birden çok kişi seçilebilen kişi sütunu tek kişilik sanılıyordu.
+- Negatif sayı JSON'a `5-` olarak yazılıyordu.
+- Çalışma sayfası ekleme yanlış adrese gidiyordu (`worksheets/add`); tenant'ta denenmedi.
 
 ### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
 

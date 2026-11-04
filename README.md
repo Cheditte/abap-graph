@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.7.0, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.1, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -716,6 +716,18 @@ Found on the tenant and fixed in 0.5.1:
 
   ![00789 in E2 after 0.5.1](docs/img/excel-leading-zero.png)
 - **`ZCHE_GRAPH_CHECK`:** the blank after "Permissions in the token:" was missing.
+
+Found by a code review and fixed in 0.7.1:
+
+- An answer that is not UTF-8 (a proxy's error page) gave a short dump; it now gives the usual error.
+- Large answers were read slowly: the JSON reader searched the whole rest of the text for a backslash in every string.
+- In a background job, the job log showed the hint or the request-id line instead of the error.
+- A time zone that SAP does not know, or none at all, gave wrong times; it now gives an error that says so.
+- `"Kaya, Derya" <derya@b.com>` was split at the comma into two recipients.
+- List fields whose value is an object (a link, a location, a single person) were left out of an item.
+- A person column that allows several people was taken for a single one.
+- A negative number was written as `5-` in JSON.
+- Adding a worksheet used the wrong address (`worksheets/add`); not tried on the tenant.
 
 ### Unit tests and made-up credentials, 2 November 2026
 

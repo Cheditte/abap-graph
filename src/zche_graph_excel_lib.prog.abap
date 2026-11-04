@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL_LIB: Excel workbooks in SharePoint or OneDrive
 *& through Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_EXCEL_LIB with type "Include
@@ -545,7 +545,8 @@ CLASS lcl_graph_excel IMPLEMENTATION.
     lo_writer->end_object( ).
     lv_json = lo_writer->result( ).
     lt_headers = headers( ).
-    lv_path = book_path( `/worksheets` ).
+    " The worksheets collection has an action of its own for this
+    lv_path = book_path( `/worksheets/add` ).
     mo_client->send_json( iv_method = 'POST' iv_path = lv_path iv_json = lv_json it_headers = lt_headers ).
   ENDMETHOD.
 
@@ -780,6 +781,7 @@ CLASS ltc_graph_excel DEFINITION FINAL FOR TESTING.
     METHODS write_block FOR TESTING RAISING lcx_graph.
     METHODS session_header FOR TESTING RAISING lcx_graph.
     METHODS table_rows FOR TESTING RAISING lcx_graph.
+    METHODS add_sheet FOR TESTING RAISING lcx_graph.
 
     METHODS request_at
       IMPORTING
@@ -863,6 +865,18 @@ CLASS ltc_graph_excel IMPLEMENTATION.
         lv_failed = abap_true.
     ENDTRY.
     cl_aunit_assert=>assert_equals( act = lv_failed exp = abap_true ).
+  ENDMETHOD.
+
+
+  METHOD add_sheet.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    mo_http->answer( iv_status = 201 iv_body = `{"id":"S2","name":"Kasım"}` ).
+    mo_cut->add_worksheet( `Kasım` ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `POST` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/drives/D1/items/X1/workbook/worksheets/add` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-body exp = `{"name":"Kasım"}` ).
   ENDMETHOD.
 
 

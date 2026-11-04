@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR: Outlook calendar through Microsoft Graph
-*& abap-graph 0.7.0, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_CALENDAR_LIB
@@ -199,18 +199,20 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD error.
     DATA lv_text TYPE string.
+    DATA lv_line TYPE string.
     lv_text = ix_graph->get_text( ).
     CONCATENATE `ERROR ` lv_text INTO lv_text.
     WRITE: / lv_text.
     IF ix_graph->hint IS NOT INITIAL.
-      CONCATENATE `      ` ix_graph->hint INTO lv_text.
-      WRITE: / lv_text.
+      CONCATENATE `      ` ix_graph->hint INTO lv_line.
+      WRITE: / lv_line.
     ENDIF.
     IF ix_graph->request_id IS NOT INITIAL.
-      CONCATENATE `      request-id: ` ix_graph->request_id INTO lv_text.
-      WRITE: / lv_text.
+      CONCATENATE `      request-id: ` ix_graph->request_id INTO lv_line.
+      WRITE: / lv_line.
     ENDIF.
-    " In the background an E message ends the job as "Cancelled"
+    " In the background an E message ends the job as "Cancelled"; it carries
+    " the error itself, not the hint or request-id lines
     IF sy-batch = abap_true.
       MESSAGE lv_text TYPE 'E'.
     ENDIF.
