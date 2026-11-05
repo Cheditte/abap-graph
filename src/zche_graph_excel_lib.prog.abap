@@ -782,6 +782,7 @@ CLASS ltc_graph_excel DEFINITION FINAL FOR TESTING.
     METHODS session_header FOR TESTING RAISING lcx_graph.
     METHODS table_rows FOR TESTING RAISING lcx_graph.
     METHODS add_sheet FOR TESTING RAISING lcx_graph.
+    METHODS clear_and_calculate FOR TESTING RAISING lcx_graph.
 
     METHODS request_at
       IMPORTING
@@ -865,6 +866,23 @@ CLASS ltc_graph_excel IMPLEMENTATION.
         lv_failed = abap_true.
     ENDTRY.
     cl_aunit_assert=>assert_equals( act = lv_failed exp = abap_true ).
+  ENDMETHOD.
+
+
+  METHOD clear_and_calculate.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    mo_cut->clear_range( iv_sheet = `Data` iv_address = `b2:d5` ).
+    mo_cut->calculate( ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri
+                                    exp = `/v1.0/drives/D1/items/X1/workbook/worksheets('Data')/range(address='b2:d5')/clear` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-body exp = `{"applyTo":"Contents"}` ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/drives/D1/items/X1/workbook/application/calculate` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-body exp = `{"calculationType":"Full"}` ).
   ENDMETHOD.
 
 

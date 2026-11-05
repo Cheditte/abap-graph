@@ -1224,15 +1224,19 @@ CLASS ltc_graph_mail IMPLEMENTATION.
 
 
   METHOD no_recipient.
+    " Refused before anything is asked of Microsoft, not by the test double
     DATA ls_mail TYPE lif_graph_mail=>ty_mail.
-    DATA lv_failed TYPE abap_bool.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_count TYPE i.
     ls_mail-subject = `x`.
     TRY.
         mo_cut->send( ls_mail ).
-      CATCH lcx_graph.
-        lv_failed = abap_true.
+      CATCH lcx_graph INTO lx_graph.
     ENDTRY.
-    cl_aunit_assert=>assert_equals( act = lv_failed exp = abap_true ).
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->text exp = `The mail has no recipient.` ).
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 0 ).
   ENDMETHOD.
 
 
@@ -1294,13 +1298,22 @@ CLASS ltc_graph_mail IMPLEMENTATION.
 
   METHOD folder_by_name.
     DATA lv_id TYPE string.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_uri TYPE string.
     lv_id = mo_cut->folder_id( `Archive` ).
     cl_aunit_assert=>assert_equals( act = lv_id exp = `archive` ).
-    " Not at the top level, found below the inbox
+    " Not at the top level, found below the inbox; the quote is doubled
     mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"F9"}]}` ).
-    lv_id = mo_cut->folder_id( `SAP Faturalar` ).
+    lv_id = mo_cut->folder_id( `Ali's Faturalar` ).
     cl_aunit_assert=>assert_equals( act = lv_id exp = `F9` ).
+    ls_request = request_at( 2 ).
+    lv_uri = cl_http_utility=>unescape_url( escaped = ls_request-uri ).
+    cl_aunit_assert=>assert_equals( act = lv_uri
+                                    exp = `/v1.0/users/sap@contoso.com/mailFolders?$select=id&$filter=displayName eq 'Ali''s Faturalar'` ).
+    ls_request = request_at( 3 ).
+    lv_uri = cl_http_utility=>unescape_url( escaped = ls_request-uri ).
+    cl_aunit_assert=>assert_char_cp( act = lv_uri exp = `/v1.0/users/sap@contoso.com/mailFolders/inbox/childFolders?*` ).
   ENDMETHOD.
 
 ENDCLASS.
