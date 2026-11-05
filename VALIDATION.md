@@ -4,7 +4,7 @@
 
 **English** | [Türkçe](VALIDATION.tr.md)
 
-This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.7.4, not yet released.
+This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.8.0, not yet released; the group-and-role and SU01 comparisons added in 0.8.0 have not been tried in SAP yet.
 
 ## What has been verified
 

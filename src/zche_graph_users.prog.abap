@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_USERS: users and groups of Microsoft Entra ID through
 *& Microsoft Graph
-*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.8.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_USERS_LIB first,
@@ -14,6 +14,8 @@
 *&   - show the members of a group
 *&   - list the active SAP dialog users whose e-mail address (SU01) has
 *&     no Microsoft account, or a disabled one
+*&   - compare a Microsoft group with the users of an SAP role
+*&   - compare name, department and job title in SU01 with Entra ID
 *& Nothing is changed, neither in SAP nor in Microsoft Entra ID.
 *& Your own programs call LCL_GRAPH_USERS directly; see the README.
 *&---------------------------------------------------------------------*
@@ -37,12 +39,15 @@ PARAMETERS r_user RADIOBUTTON GROUP do DEFAULT 'X'.
 PARAMETERS r_find RADIOBUTTON GROUP do.
 PARAMETERS r_group RADIOBUTTON GROUP do.
 PARAMETERS r_sap RADIOBUTTON GROUP do.
+PARAMETERS r_role RADIOBUTTON GROUP do.
+PARAMETERS r_attr RADIOBUTTON GROUP do.
 SELECTION-SCREEN END OF BLOCK b_do.
 
 SELECTION-SCREEN BEGIN OF BLOCK b_what WITH FRAME TITLE t_what.
 PARAMETERS p_user TYPE c LENGTH 120 LOWER CASE.
 PARAMETERS p_filter TYPE c LENGTH 255 LOWER CASE.
 PARAMETERS p_group TYPE c LENGTH 120 LOWER CASE.
+PARAMETERS p_role TYPE agr_name.
 PARAMETERS p_nested AS CHECKBOX.
 PARAMETERS p_max TYPE i DEFAULT 100.
 SELECT-OPTIONS s_user FOR gv_bname.
@@ -109,9 +114,12 @@ CLASS lcl_text IMPLEMENTATION.
     add( EXPORTING iv_name = 'R_FIND' iv_en = 'Find users (filter)' iv_tr = 'Kullanıcı ara (filtre)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_GROUP' iv_en = 'Members of a group' iv_tr = 'Grubun üyeleri' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_SAP' iv_en = 'SAP users: account check' iv_tr = 'SAP kullanıcıları: hesap' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'R_ROLE' iv_en = 'Group against SAP role' iv_tr = 'Grup ile SAP rolü' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'R_ATTR' iv_en = 'SU01 against Entra ID' iv_tr = 'SU01 ile Entra ID' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_USER' iv_en = 'User (address or ID)' iv_tr = 'Kullanıcı (adres ya da ID)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_FILTER' iv_en = 'Filter (department eq ''X'')' iv_tr = 'Filtre (department eq ''X'')' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_GROUP' iv_en = 'Group (name or ID)' iv_tr = 'Grup (ad ya da ID)' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_ROLE' iv_en = 'SAP role' iv_tr = 'SAP rolü' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_NESTED' iv_en = 'Include nested groups' iv_tr = 'İç içe grupları da al' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_MAX' iv_en = 'At most (users)' iv_tr = 'En çok (kullanıcı)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'S_USER' iv_en = 'SAP users' iv_tr = 'SAP kullanıcıları' iv_kind = 'S' CHANGING ct_texts = lt_texts ).
@@ -163,6 +171,26 @@ CLASS lcl_app DEFINITION FINAL.
     CLASS-METHODS check_sap
       IMPORTING
         io_users TYPE REF TO lcl_graph_users
+      RAISING
+        lcx_graph.
+
+    CLASS-METHODS check_role
+      IMPORTING
+        io_users TYPE REF TO lcl_graph_users
+      RAISING
+        lcx_graph.
+
+    CLASS-METHODS check_details
+      IMPORTING
+        io_users TYPE REF TO lcl_graph_users
+      RAISING
+        lcx_graph.
+
+    CLASS-METHODS all_users
+      IMPORTING
+        io_users        TYPE REF TO lcl_graph_users
+      RETURNING
+        value(rt_users) TYPE lif_graph_users=>ty_users
       RAISING
         lcx_graph.
 
@@ -321,15 +349,7 @@ CLASS lcl_app IMPLEMENTATION.
         lv_compared = lv_compared + 1.
       ENDIF.
     ENDLOOP.
-    " All users of the company, read once
-    lt_entra = io_users->find( ).
-    " find( ) stops at 100,000 users; beyond them everyone would look missing
-    lv_count = lines( lt_entra ).
-    IF lv_count >= 100000.
-      RAISE EXCEPTION TYPE lcx_graph
-        EXPORTING
-          text = `Microsoft Entra ID has 100,000 users or more; the check would not be complete.`.
-    ENDIF.
+    lt_entra = all_users( io_users ).
     lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra ).
 
     lv_count = lines( lt_entra ).
@@ -347,6 +367,117 @@ CLASS lcl_app IMPLEMENTATION.
       ENDIF.
       lv_bname = ls_finding-bname.
       CONCATENATE lv_bname ls_finding-mail lv_text ls_finding-display_name INTO lv_text SEPARATED BY ` | `.
+      WRITE: / lv_text.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD all_users.
+    DATA lv_count TYPE i.
+    " All users of the company, read once
+    rt_users = io_users->find( ).
+    " find( ) stops at 100,000 users; beyond them everyone would look missing
+    lv_count = lines( rt_users ).
+    IF lv_count >= 100000.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `Microsoft Entra ID has 100,000 users or more; the check would not be complete.`.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD check_role.
+    DATA lt_members TYPE lif_graph_users=>ty_users.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_users.
+    DATA lt_role TYPE lif_graph_users=>ty_bnames.
+    DATA lt_findings TYPE lif_graph_users=>ty_role_findings.
+    DATA ls_finding TYPE lif_graph_users=>ty_role_finding.
+    DATA lv_group TYPE string.
+    DATA lv_text TYPE string.
+    DATA lv_bname TYPE string.
+    DATA lv_count TYPE i.
+
+    IF p_group IS INITIAL OR p_role IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `Enter a group and an SAP role.`.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'S_USER_AGR'
+      ID 'ACT_GROUP' FIELD p_role
+      ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      CONCATENATE `No authorization to display role ` p_role ` (S_USER_AGR).` INTO lv_text.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = lv_text.
+    ENDIF.
+
+    lv_group = p_group.
+    lv_group = lcl_graph_conv=>trim( lv_group ).
+    lt_members = io_users->members( iv_group = lv_group iv_nested = p_nested ).
+    lt_sap = lcl_graph_users=>sap_users( s_user[] ).
+    lt_role = lcl_graph_users=>role_users( p_role ).
+    lt_findings = lcl_graph_users=>compare_role( it_members = lt_members it_sap = lt_sap it_role = lt_role ).
+
+    lv_count = lines( lt_members ).
+    heading( iv_en = `Group members read` iv_tr = `Okunan grup üyesi` iv_count = lv_count ).
+    lv_count = lines( lt_role ).
+    heading( iv_en = `SAP users with the role today` iv_tr = `Bugün rolü olan SAP kullanıcısı` iv_count = lv_count ).
+    lv_count = lines( lt_findings ).
+    heading( iv_en = `Findings` iv_tr = `Bulgular` iv_count = lv_count ).
+    LOOP AT lt_findings INTO ls_finding.
+      CASE ls_finding-finding.
+        WHEN `no_role`.
+          lv_text = lcl_text=>get( iv_en = `in the group, lacks the SAP role` iv_tr = `grupta, SAP rolü yok` ).
+        WHEN `extra_role`.
+          lv_text = lcl_text=>get( iv_en = `has the SAP role, not in the group` iv_tr = `SAP rolü var, grupta değil` ).
+        WHEN `no_sap_user`.
+          lv_text = lcl_text=>get( iv_en = `in the group, no active SAP user has this address`
+                                   iv_tr = `grupta, bu adresle aktif SAP kullanıcısı yok` ).
+        WHEN OTHERS.
+          lv_text = lcl_text=>get( iv_en = `has the SAP role, no e-mail address in SU01 (not compared)`
+                                   iv_tr = `SAP rolü var, SU01'de e-posta adresi yok (karşılaştırılmadı)` ).
+      ENDCASE.
+      lv_bname = ls_finding-bname.
+      CONCATENATE lv_bname ls_finding-mail lv_text ls_finding-display_name INTO lv_text SEPARATED BY ` | `.
+      WRITE: / lv_text.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD check_details.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_details.
+    DATA lt_entra TYPE lif_graph_users=>ty_users.
+    DATA lt_differences TYPE lif_graph_users=>ty_differences.
+    DATA ls_difference TYPE lif_graph_users=>ty_difference.
+    DATA lv_text TYPE string.
+    DATA lv_field TYPE string.
+    DATA lv_bname TYPE string.
+    DATA lv_count TYPE i.
+
+    lt_sap = lcl_graph_users=>sap_details( s_user[] ).
+    lt_entra = all_users( io_users ).
+    lt_differences = lcl_graph_users=>compare_details( it_sap = lt_sap it_entra = lt_entra ).
+
+    lv_count = lines( lt_sap ).
+    heading( iv_en = `Active SAP dialog users with an address compared`
+             iv_tr = `Karşılaştırılan adresli aktif SAP diyalog kullanıcısı` iv_count = lv_count ).
+    lv_count = lines( lt_differences ).
+    heading( iv_en = `Differences (SU01 -> Entra ID)` iv_tr = `Farklar (SU01 -> Entra ID)` iv_count = lv_count ).
+    LOOP AT lt_differences INTO ls_difference.
+      CASE ls_difference-field.
+        WHEN `first_name`.
+          lv_field = lcl_text=>get( iv_en = `First name` iv_tr = `Ad` ).
+        WHEN `last_name`.
+          lv_field = lcl_text=>get( iv_en = `Last name` iv_tr = `Soyad` ).
+        WHEN `department`.
+          lv_field = lcl_text=>get( iv_en = `Department` iv_tr = `Departman` ).
+        WHEN OTHERS.
+          lv_field = lcl_text=>get( iv_en = `Job title` iv_tr = `Unvan` ).
+      ENDCASE.
+      lv_bname = ls_difference-bname.
+      CONCATENATE ls_difference-sap_value `->` ls_difference-entra_value INTO lv_text SEPARATED BY space.
+      CONCATENATE lv_bname ls_difference-mail lv_field lv_text INTO lv_text SEPARATED BY ` | `.
       WRITE: / lv_text.
     ENDLOOP.
   ENDMETHOD.
@@ -382,6 +513,12 @@ CLASS lcl_app IMPLEMENTATION.
       lv_count = lines( lt_users ).
       heading( iv_en = `Members` iv_tr = `Üyeler` iv_count = lv_count ).
       show_users( lt_users ).
+
+    ELSEIF r_role = abap_true.
+      check_role( lo_users ).
+
+    ELSEIF r_attr = abap_true.
+      check_details( lo_users ).
 
     ELSE.
       check_sap( lo_users ).

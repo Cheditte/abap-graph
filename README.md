@@ -34,7 +34,7 @@ Microsoft Graph is the interface that lets programs access Microsoft 365 service
 
 | Topic | Status |
 | --- | --- |
-| Source version | 0.7.4; unreleased development version |
+| Source version | 0.8.0; unreleased development version |
 | Test environment | A4H/001, SAP_BASIS 816 and a Microsoft 365 test tenant; coverage varies by version and operation |
 | Older SAP systems | Targets classic ABAP 7.00 syntax; ECC 6.0 has not been tested |
 | Excel cell operations | Microsoft has a support limitation for the sign-in method used; use Files to transfer whole `.xlsx` files |

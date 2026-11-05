@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_USERS_LIB: users and groups of Microsoft Entra ID through
 *& Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.8.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_USERS_LIB with type "Include
@@ -71,6 +71,43 @@ INTERFACE lif_graph_users.
     ty_findings TYPE STANDARD TABLE OF ty_finding WITH DEFAULT KEY.
 
   TYPES ty_bname_range TYPE RANGE OF xubname.
+  TYPES ty_bnames TYPE STANDARD TABLE OF xubname WITH DEFAULT KEY.
+
+  " Group and role check. FINDING: no_role (in the group, the SAP user lacks
+  " the role), extra_role (has the role, not in the group), no_sap_user (in
+  " the group, no active SAP user has the address), no_mail (has the role,
+  " no address in SU01, not compared)
+  TYPES:
+    BEGIN OF ty_role_finding,
+      bname        TYPE xubname,
+      mail         TYPE string,
+      finding      TYPE string,
+      display_name TYPE string,
+    END OF ty_role_finding,
+    ty_role_findings TYPE STANDARD TABLE OF ty_role_finding WITH DEFAULT KEY.
+
+  " The user master data (SU01) that Microsoft Entra ID also holds
+  TYPES:
+    BEGIN OF ty_sap_detail,
+      bname      TYPE xubname,
+      mail       TYPE string,
+      first_name TYPE string,
+      last_name  TYPE string,
+      department TYPE string,
+      job_title  TYPE string,
+    END OF ty_sap_detail,
+    ty_sap_details TYPE STANDARD TABLE OF ty_sap_detail WITH DEFAULT KEY.
+
+  " FIELD: first_name, last_name, department or job_title
+  TYPES:
+    BEGIN OF ty_difference,
+      bname       TYPE xubname,
+      mail        TYPE string,
+      field       TYPE string,
+      sap_value   TYPE string,
+      entra_value TYPE string,
+    END OF ty_difference,
+    ty_differences TYPE STANDARD TABLE OF ty_difference WITH DEFAULT KEY.
 ENDINTERFACE.
 
 
@@ -174,8 +211,60 @@ CLASS lcl_graph_users DEFINITION FINAL.
       RETURNING
         value(rt_findings) TYPE lif_graph_users=>ty_findings.
 
+    "! SAP users that hold the role today (AGR_USERS, also through a
+    "! composite role)
+    CLASS-METHODS role_users
+      IMPORTING
+        iv_role          TYPE agr_name
+      RETURNING
+        value(rt_bnames) TYPE lif_graph_users=>ty_bnames.
+
+    "! Group members against the users of an SAP role. People are matched by
+    "! address (mail or user principal name, case ignored); only enabled
+    "! accounts count as members, only active SAP dialog users are compared.
+    CLASS-METHODS compare_role
+      IMPORTING
+        it_members         TYPE lif_graph_users=>ty_users
+        it_sap             TYPE lif_graph_users=>ty_sap_users
+        it_role            TYPE lif_graph_users=>ty_bnames
+      RETURNING
+        value(rt_findings) TYPE lif_graph_users=>ty_role_findings.
+
+    "! Name, department and job title from SU01 for the active dialog users
+    "! with an address. Read with BAPI_USER_GET_DETAIL, so its authority
+    "! check applies; users it refuses are left out.
+    CLASS-METHODS sap_details
+      IMPORTING
+        it_bname          TYPE lif_graph_users=>ty_bname_range OPTIONAL
+      RETURNING
+        value(rt_details) TYPE lif_graph_users=>ty_sap_details.
+
+    "! Fields where SU01 differs from Microsoft Entra ID. Blanks and case are
+    "! ignored; an empty value in Entra ID is never proposed for SAP.
+    CLASS-METHODS compare_details
+      IMPORTING
+        it_sap                TYPE lif_graph_users=>ty_sap_details
+        it_entra              TYPE lif_graph_users=>ty_users
+      RETURNING
+        value(rt_differences) TYPE lif_graph_users=>ty_differences.
+
   PRIVATE SECTION.
     DATA mo_client TYPE REF TO lcl_graph_client.
+
+    CLASS-METHODS address_key
+      IMPORTING
+        iv_address    TYPE string
+      RETURNING
+        value(rv_key) TYPE string.
+
+    CLASS-METHODS add_difference
+      IMPORTING
+        is_sap         TYPE lif_graph_users=>ty_sap_detail
+        iv_field       TYPE string
+        iv_sap         TYPE string
+        iv_entra       TYPE string
+      CHANGING
+        ct_differences TYPE lif_graph_users=>ty_differences.
 
     METHODS user_path
       IMPORTING
@@ -638,6 +727,242 @@ CLASS lcl_graph_users IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
+
+  METHOD address_key.
+    rv_key = iv_address.
+    CONDENSE rv_key NO-GAPS.
+    TRANSLATE rv_key TO LOWER CASE.
+  ENDMETHOD.
+
+
+  METHOD role_users.
+    TYPES:
+      BEGIN OF lty_assignment,
+        uname    TYPE agr_users-uname,
+        from_dat TYPE agr_users-from_dat,
+        to_dat   TYPE agr_users-to_dat,
+      END OF lty_assignment.
+    DATA lt_rows TYPE STANDARD TABLE OF lty_assignment WITH DEFAULT KEY.
+    DATA ls_row TYPE lty_assignment.
+
+    SELECT uname from_dat to_dat FROM agr_users INTO TABLE lt_rows
+      WHERE agr_name = iv_role.
+    LOOP AT lt_rows INTO ls_row
+         WHERE from_dat <= sy-datum AND to_dat >= sy-datum.
+      APPEND ls_row-uname TO rt_bnames.
+    ENDLOOP.
+    SORT rt_bnames.
+    DELETE ADJACENT DUPLICATES FROM rt_bnames.
+  ENDMETHOD.
+
+
+  METHOD compare_role.
+    TYPES:
+      BEGIN OF lty_sap,
+        address TYPE string,
+        bname   TYPE xubname,
+      END OF lty_sap.
+    DATA lt_sap_by_address TYPE SORTED TABLE OF lty_sap WITH NON-UNIQUE KEY address.
+    DATA ls_sap_address TYPE lty_sap.
+    DATA lt_member_addresses TYPE SORTED TABLE OF string WITH UNIQUE KEY table_line.
+    DATA lt_role TYPE SORTED TABLE OF xubname WITH UNIQUE KEY table_line.
+    DATA ls_member TYPE lif_graph_users=>ty_user.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_user.
+    DATA ls_finding TYPE lif_graph_users=>ty_role_finding.
+    DATA lv_bname TYPE xubname.
+    DATA lv_mail TYPE string.
+    DATA lv_upn TYPE string.
+    DATA lv_found TYPE abap_bool.
+
+    LOOP AT it_role INTO lv_bname.
+      INSERT lv_bname INTO TABLE lt_role.
+    ENDLOOP.
+    LOOP AT it_sap INTO ls_sap WHERE active = abap_true.
+      ls_sap_address-address = address_key( ls_sap-mail ).
+      IF ls_sap_address-address IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      ls_sap_address-bname = ls_sap-bname.
+      INSERT ls_sap_address INTO TABLE lt_sap_by_address.
+    ENDLOOP.
+
+    " Every enabled member needs an SAP user with the role
+    LOOP AT it_members INTO ls_member WHERE account_enabled = abap_true.
+      lv_mail = address_key( ls_member-mail ).
+      lv_upn = address_key( ls_member-user_principal_name ).
+      IF lv_mail IS NOT INITIAL.
+        INSERT lv_mail INTO TABLE lt_member_addresses.
+      ENDIF.
+      IF lv_upn IS NOT INITIAL.
+        INSERT lv_upn INTO TABLE lt_member_addresses.
+      ENDIF.
+      CLEAR ls_finding.
+      ls_finding-display_name = ls_member-display_name.
+      ls_finding-mail = lv_mail.
+      IF ls_finding-mail IS INITIAL.
+        ls_finding-mail = lv_upn.
+      ENDIF.
+      lv_found = abap_false.
+      LOOP AT lt_sap_by_address INTO ls_sap_address
+           WHERE address = lv_mail OR address = lv_upn.
+        lv_found = abap_true.
+        READ TABLE lt_role TRANSPORTING NO FIELDS WITH TABLE KEY table_line = ls_sap_address-bname.
+        IF sy-subrc <> 0.
+          ls_finding-bname = ls_sap_address-bname.
+          ls_finding-finding = `no_role`.
+          APPEND ls_finding TO rt_findings.
+        ENDIF.
+      ENDLOOP.
+      IF lv_found = abap_false.
+        ls_finding-finding = `no_sap_user`.
+        APPEND ls_finding TO rt_findings.
+      ENDIF.
+    ENDLOOP.
+
+    " Every active role user needs to be in the group
+    LOOP AT it_sap INTO ls_sap WHERE active = abap_true.
+      READ TABLE lt_role TRANSPORTING NO FIELDS WITH TABLE KEY table_line = ls_sap-bname.
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
+      CLEAR ls_finding.
+      ls_finding-bname = ls_sap-bname.
+      lv_mail = address_key( ls_sap-mail ).
+      ls_finding-mail = lv_mail.
+      IF lv_mail IS INITIAL.
+        ls_finding-finding = `no_mail`.
+        APPEND ls_finding TO rt_findings.
+        CONTINUE.
+      ENDIF.
+      READ TABLE lt_member_addresses TRANSPORTING NO FIELDS WITH TABLE KEY table_line = lv_mail.
+      IF sy-subrc <> 0.
+        ls_finding-finding = `extra_role`.
+        APPEND ls_finding TO rt_findings.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD sap_details.
+    DATA lt_users TYPE lif_graph_users=>ty_sap_users.
+    DATA ls_user TYPE lif_graph_users=>ty_sap_user.
+    DATA ls_detail TYPE lif_graph_users=>ty_sap_detail.
+    DATA ls_address TYPE bapiaddr3.
+    DATA lt_return TYPE STANDARD TABLE OF bapiret2 WITH DEFAULT KEY.
+    DATA ls_return TYPE bapiret2.
+    DATA lv_failed TYPE abap_bool.
+
+    lt_users = sap_users( it_bname ).
+    LOOP AT lt_users INTO ls_user WHERE active = abap_true AND mail IS NOT INITIAL.
+      CLEAR: ls_address, lt_return, lv_failed.
+      CALL FUNCTION 'BAPI_USER_GET_DETAIL'
+        EXPORTING
+          username = ls_user-bname
+        IMPORTING
+          address  = ls_address
+        TABLES
+          return   = lt_return.
+      LOOP AT lt_return INTO ls_return WHERE type = 'E' OR type = 'A'.
+        lv_failed = abap_true.
+        EXIT.
+      ENDLOOP.
+      IF lv_failed = abap_true.
+        CONTINUE.
+      ENDIF.
+      CLEAR ls_detail.
+      ls_detail-bname = ls_user-bname.
+      ls_detail-mail = ls_user-mail.
+      ls_detail-first_name = ls_address-firstname.
+      ls_detail-last_name = ls_address-lastname.
+      ls_detail-department = ls_address-department.
+      ls_detail-job_title = ls_address-function.
+      APPEND ls_detail TO rt_details.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD add_difference.
+    DATA lv_sap TYPE string.
+    DATA lv_entra TYPE string.
+    DATA ls_difference TYPE lif_graph_users=>ty_difference.
+
+    lv_entra = iv_entra.
+    CONDENSE lv_entra.
+    IF lv_entra IS INITIAL.
+      RETURN.
+    ENDIF.
+    lv_sap = iv_sap.
+    CONDENSE lv_sap.
+    TRANSLATE lv_sap TO UPPER CASE.
+    TRANSLATE lv_entra TO UPPER CASE.
+    IF lv_sap = lv_entra.
+      RETURN.
+    ENDIF.
+    ls_difference-bname = is_sap-bname.
+    ls_difference-mail = is_sap-mail.
+    ls_difference-field = iv_field.
+    ls_difference-sap_value = iv_sap.
+    CONDENSE ls_difference-sap_value.
+    ls_difference-entra_value = iv_entra.
+    CONDENSE ls_difference-entra_value.
+    APPEND ls_difference TO ct_differences.
+  ENDMETHOD.
+
+
+  METHOD compare_details.
+    TYPES:
+      BEGIN OF lty_entra,
+        address TYPE string,
+        index   TYPE i,
+      END OF lty_entra.
+    DATA lt_by_address TYPE SORTED TABLE OF lty_entra WITH NON-UNIQUE KEY address.
+    DATA ls_by_address TYPE lty_entra.
+    DATA ls_entra TYPE lif_graph_users=>ty_user.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_detail.
+    DATA lv_mail TYPE string.
+    DATA lv_upn TYPE string.
+    DATA lv_count TYPE i.
+
+    LOOP AT it_entra INTO ls_entra.
+      ls_by_address-index = sy-tabix.
+      lv_mail = address_key( ls_entra-mail ).
+      lv_upn = address_key( ls_entra-user_principal_name ).
+      IF lv_mail IS NOT INITIAL.
+        ls_by_address-address = lv_mail.
+        INSERT ls_by_address INTO TABLE lt_by_address.
+      ENDIF.
+      IF lv_upn IS NOT INITIAL AND lv_upn <> lv_mail.
+        ls_by_address-address = lv_upn.
+        INSERT ls_by_address INTO TABLE lt_by_address.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT it_sap INTO ls_sap.
+      lv_mail = address_key( ls_sap-mail ).
+      " The address must lead to exactly one Microsoft account
+      CLEAR: ls_by_address, lv_count.
+      LOOP AT lt_by_address INTO ls_by_address WHERE address = lv_mail.
+        lv_count = lv_count + 1.
+      ENDLOOP.
+      IF lv_count <> 1.
+        CONTINUE.
+      ENDIF.
+      READ TABLE it_entra INDEX ls_by_address-index INTO ls_entra.
+      add_difference( EXPORTING is_sap = ls_sap iv_field = `first_name`
+                                iv_sap = ls_sap-first_name iv_entra = ls_entra-given_name
+                      CHANGING  ct_differences = rt_differences ).
+      add_difference( EXPORTING is_sap = ls_sap iv_field = `last_name`
+                                iv_sap = ls_sap-last_name iv_entra = ls_entra-surname
+                      CHANGING  ct_differences = rt_differences ).
+      add_difference( EXPORTING is_sap = ls_sap iv_field = `department`
+                                iv_sap = ls_sap-department iv_entra = ls_entra-department
+                      CHANGING  ct_differences = rt_differences ).
+      add_difference( EXPORTING is_sap = ls_sap iv_field = `job_title`
+                                iv_sap = ls_sap-job_title iv_entra = ls_entra-job_title
+                      CHANGING  ct_differences = rt_differences ).
+    ENDLOOP.
+  ENDMETHOD.
+
 ENDCLASS.
 
 
@@ -663,6 +988,8 @@ CLASS ltc_graph_users DEFINITION FINAL FOR TESTING.
     METHODS members_by_name FOR TESTING RAISING lcx_graph.
     METHODS group_not_found FOR TESTING.
     METHODS compare_sap FOR TESTING.
+    METHODS compare_group_and_role FOR TESTING.
+    METHODS compare_su01_details FOR TESTING.
 
     METHODS request_at
       IMPORTING
@@ -863,6 +1190,124 @@ CLASS ltc_graph_users IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = ls_finding-display_name exp = `Ayşe Yılmaz` ).
     READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'MOZTURK'.
     cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `missing` ).
+  ENDMETHOD.
+
+
+  METHOD compare_group_and_role.
+    DATA lt_members TYPE lif_graph_users=>ty_users.
+    DATA ls_member TYPE lif_graph_users=>ty_user.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_users.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_user.
+    DATA lt_role TYPE lif_graph_users=>ty_bnames.
+    DATA lt_findings TYPE lif_graph_users=>ty_role_findings.
+    DATA ls_finding TYPE lif_graph_users=>ty_role_finding.
+    DATA lv_count TYPE i.
+
+    " Members: Derya (has the role), Ayşe (lacks it, found through the user
+    " principal name), Can (no SAP user), Eski (disabled: not a member)
+    ls_member-mail = `Derya@Contoso.com`.
+    ls_member-account_enabled = abap_true.
+    APPEND ls_member TO lt_members.
+    CLEAR ls_member.
+    ls_member-user_principal_name = `ayse@contoso.com`.
+    ls_member-display_name = `Ayşe Yılmaz`.
+    ls_member-account_enabled = abap_true.
+    APPEND ls_member TO lt_members.
+    CLEAR ls_member.
+    ls_member-mail = `can@contoso.com`.
+    ls_member-display_name = `Can Demir`.
+    ls_member-account_enabled = abap_true.
+    APPEND ls_member TO lt_members.
+    CLEAR ls_member.
+    ls_member-mail = `eski@contoso.com`.
+    ls_member-account_enabled = abap_false.
+    APPEND ls_member TO lt_members.
+
+    ls_sap-active = abap_true.
+    ls_sap-bname = 'DKAYA'.
+    ls_sap-mail = `derya@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+    ls_sap-bname = 'AYILMAZ'.
+    ls_sap-mail = ` AYSE@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+    ls_sap-bname = 'ESKI'.
+    ls_sap-mail = `eski@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+    ls_sap-bname = 'NOMAIL'.
+    CLEAR ls_sap-mail.
+    APPEND ls_sap TO lt_sap.
+    " Locked in SAP: not compared, even with the role
+    ls_sap-bname = 'LOCKED'.
+    ls_sap-mail = `locked@contoso.com`.
+    ls_sap-active = abap_false.
+    APPEND ls_sap TO lt_sap.
+
+    APPEND 'DKAYA' TO lt_role.
+    APPEND 'ESKI' TO lt_role.
+    APPEND 'NOMAIL' TO lt_role.
+    APPEND 'LOCKED' TO lt_role.
+
+    lt_findings = lcl_graph_users=>compare_role( it_members = lt_members it_sap = lt_sap it_role = lt_role ).
+    lv_count = lines( lt_findings ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 4 ).
+    READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'AYILMAZ'.
+    cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `no_role` ).
+    cl_aunit_assert=>assert_equals( act = ls_finding-display_name exp = `Ayşe Yılmaz` ).
+    READ TABLE lt_findings INTO ls_finding WITH KEY finding = `no_sap_user`.
+    cl_aunit_assert=>assert_equals( act = ls_finding-mail exp = `can@contoso.com` ).
+    READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'ESKI'.
+    cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `extra_role` ).
+    READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'NOMAIL'.
+    cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `no_mail` ).
+  ENDMETHOD.
+
+
+  METHOD compare_su01_details.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_details.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_detail.
+    DATA lt_entra TYPE lif_graph_users=>ty_users.
+    DATA ls_entra TYPE lif_graph_users=>ty_user.
+    DATA lt_differences TYPE lif_graph_users=>ty_differences.
+    DATA ls_difference TYPE lif_graph_users=>ty_difference.
+    DATA lv_count TYPE i.
+
+    ls_entra-mail = `derya@contoso.com`.
+    ls_entra-given_name = `Derya`.
+    ls_entra-surname = `Kaya`.
+    ls_entra-department = `Finans`.
+    ls_entra-job_title = ``.
+    APPEND ls_entra TO lt_entra.
+    " Two accounts with one address: not compared
+    CLEAR ls_entra.
+    ls_entra-mail = `ortak@contoso.com`.
+    ls_entra-department = `A`.
+    APPEND ls_entra TO lt_entra.
+    ls_entra-user_principal_name = `ortak@contoso.com`.
+    CLEAR ls_entra-mail.
+    APPEND ls_entra TO lt_entra.
+
+    " Name equal apart from case and blanks; department differs; the job
+    " title is empty in Entra ID, so SAP's value stays
+    ls_sap-bname = 'DKAYA'.
+    ls_sap-mail = `Derya@contoso.com`.
+    ls_sap-first_name = `DERYA `.
+    ls_sap-last_name = `Kaya`.
+    ls_sap-department = `Muhasebe`.
+    ls_sap-job_title = `Uzman`.
+    APPEND ls_sap TO lt_sap.
+    CLEAR ls_sap.
+    ls_sap-bname = 'ORTAK'.
+    ls_sap-mail = `ortak@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+
+    lt_differences = lcl_graph_users=>compare_details( it_sap = lt_sap it_entra = lt_entra ).
+    lv_count = lines( lt_differences ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+    READ TABLE lt_differences INDEX 1 INTO ls_difference.
+    cl_aunit_assert=>assert_equals( act = ls_difference-bname exp = 'DKAYA' ).
+    cl_aunit_assert=>assert_equals( act = ls_difference-field exp = `department` ).
+    cl_aunit_assert=>assert_equals( act = ls_difference-sap_value exp = `Muhasebe` ).
+    cl_aunit_assert=>assert_equals( act = ls_difference-entra_value exp = `Finans` ).
   ENDMETHOD.
 
 ENDCLASS.

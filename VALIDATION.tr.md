@@ -4,7 +4,7 @@
 
 [English](VALIDATION.md) | **Türkçe**
 
-Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.7.4, henüz yayımlanmamış olarak kayıtlıdır.
+Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.8.0, henüz yayımlanmamış olarak kayıtlıdır; 0.8.0'da eklenen grup–rol ve SU01 karşılaştırmaları henüz SAP'de denenmedi.
 
 ## Neler doğrulandı
 
