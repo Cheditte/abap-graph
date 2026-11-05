@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL_LIB: Excel workbooks in SharePoint or OneDrive
 *& through Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_EXCEL_LIB with type "Include
@@ -344,6 +344,12 @@ CLASS lcl_graph_excel IMPLEMENTATION.
     DO lv_length TIMES.
       lv_offset = sy-index - 1.
       lv_char = lv_start+lv_offset(1).
+      " At most XFD and 1048576: longer ones would overflow the numbers below
+      IF ( lv_char CA sy-abcde AND strlen( lv_letters ) >= 3 )
+         OR ( lv_char CA '0123456789' AND strlen( lv_digits ) >= 7 ).
+        CLEAR lv_letters.
+        EXIT.
+      ENDIF.
       IF lv_char CA sy-abcde AND lv_digits IS INITIAL.
         CONCATENATE lv_letters lv_char INTO lv_letters.
         FIND lv_char IN sy-abcde MATCH OFFSET lv_position.
@@ -362,8 +368,19 @@ CLASS lcl_graph_excel IMPLEMENTATION.
           text = lv_text.
     ENDIF.
     lv_row = lv_digits.
-    lv_last_column = lv_column + iv_columns - 1.
-    lv_last_row = lv_row + iv_rows - 1.
+    " A sheet has 1048576 rows and 16384 columns (A to XFD)
+    IF lv_row < 1 OR iv_rows > 1048576 OR iv_columns > 16384.
+      lv_last_row = 0.
+    ELSE.
+      lv_last_column = lv_column + iv_columns - 1.
+      lv_last_row = lv_row + iv_rows - 1.
+    ENDIF.
+    IF lv_last_row < 1 OR lv_last_row > 1048576 OR lv_last_column > 16384.
+      CONCATENATE `The block from "` iv_start `" does not fit on a sheet (rows 1 to 1048576, columns A to XFD).` INTO lv_text.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = lv_text.
+    ENDIF.
     lv_end_letters = column_letters( lv_last_column ).
     lv_end_digits = lcl_graph_conv=>num( lv_last_row ).
     CONCATENATE lv_letters lv_digits ':' lv_end_letters lv_end_digits INTO rv_address.
@@ -775,6 +792,7 @@ CLASS ltc_graph_excel DEFINITION FINAL FOR TESTING.
     METHODS setup.
     METHODS letters FOR TESTING.
     METHODS addresses FOR TESTING RAISING lcx_graph.
+    METHODS addresses_off_sheet FOR TESTING RAISING lcx_graph.
     METHODS text_to_rows FOR TESTING.
     METHODS workbook_of_file FOR TESTING RAISING lcx_graph.
     METHODS read_values FOR TESTING RAISING lcx_graph.
@@ -866,6 +884,33 @@ CLASS ltc_graph_excel IMPLEMENTATION.
         lv_failed = abap_true.
     ENDTRY.
     cl_aunit_assert=>assert_equals( act = lv_failed exp = abap_true ).
+  ENDMETHOD.
+
+
+  METHOD addresses_off_sheet.
+    " Too long for the numbers, row 0, and a block past the last row: errors,
+    " not an overflow; the last cell itself is fine
+    DATA lt_starts TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
+    DATA lv_start TYPE string.
+    DATA lv_address TYPE string.
+    DATA lv_failed TYPE abap_bool.
+
+    APPEND `AAAAAAAA1` TO lt_starts.
+    APPEND `A99999999999` TO lt_starts.
+    APPEND `A0` TO lt_starts.
+    APPEND `XFE1` TO lt_starts.
+    APPEND `XFD1048576` TO lt_starts.
+    LOOP AT lt_starts INTO lv_start.
+      lv_failed = abap_false.
+      TRY.
+          lcl_graph_excel=>block_address( iv_start = lv_start iv_rows = 2 iv_columns = 1 ).
+        CATCH lcx_graph.
+          lv_failed = abap_true.
+      ENDTRY.
+      cl_aunit_assert=>assert_equals( act = lv_failed exp = abap_true msg = lv_start ).
+    ENDLOOP.
+    lv_address = lcl_graph_excel=>block_address( iv_start = `XFD1048576` iv_rows = 1 iv_columns = 1 ).
+    cl_aunit_assert=>assert_equals( act = lv_address exp = `XFD1048576:XFD1048576` ).
   ENDMETHOD.
 
 

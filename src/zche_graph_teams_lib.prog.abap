@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_TEAMS_LIB: messages to a Microsoft Teams channel through
 *& a Workflows webhook (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_TEAMS_LIB with type "Include
@@ -250,7 +250,8 @@ CLASS lcl_graph_teams IMPLEMENTATION.
                                  iv_uri         = ``
                                  it_headers     = lt_headers
                                  iv_body        = lv_body ).
-    IF ls_response-status < 400.
+    " Only 2xx means the channel took it; a redirect (3xx) did not deliver it
+    IF ls_response-status >= 200 AND ls_response-status < 300.
       RETURN.
     ENDIF.
 
@@ -275,6 +276,8 @@ CLASS lcl_graph_teams IMPLEMENTATION.
         lv_hint = `The address was not accepted. Check that the workflow is on, and that the path prefix in SM59 holds the whole rest of the URL, ?...&sig=... included.`.
       WHEN 429.
         lv_hint = `Too many messages in a short time; send fewer, or later.`.
+      WHEN 301 OR 302 OR 303 OR 307 OR 308.
+        lv_hint = `The address sent the card elsewhere, so it did not arrive. Check the host and path prefix in SM59, and the proxy.`.
       WHEN OTHERS.
         lv_hint = `Look at the run history of the workflow in Teams (Workflows, the workflow, 28-day run history).`.
     ENDCASE.
@@ -312,6 +315,7 @@ CLASS ltc_graph_teams DEFINITION FINAL FOR TESTING.
     METHODS card_body FOR TESTING RAISING lcx_graph.
     METHODS send_card FOR TESTING RAISING lcx_graph.
     METHODS refused FOR TESTING.
+    METHODS redirected FOR TESTING.
     METHODS wrong_level FOR TESTING.
     METHODS text_to_facts FOR TESTING.
 ENDCLASS.
@@ -381,6 +385,27 @@ CLASS ltc_graph_teams IMPLEMENTATION.
     cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
     cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*SM59 destination ZCHE_TEAMS_TEST answered HTTP 404*' ).
     cl_aunit_assert=>assert_char_cp( act = lx_graph->hint exp = '*path prefix*' ).
+  ENDMETHOD.
+
+
+  METHOD redirected.
+    " A redirect did not deliver the card: an error, for 302 and for 307
+    DATA lx_graph TYPE REF TO lcx_graph.
+
+    mo_http->answer( iv_status = 302 ).
+    TRY.
+        mo_cut->send_text( iv_title = `Test` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `302 counted as sent` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->hint exp = '*did not arrive*' ).
+    CLEAR lx_graph.
+    mo_http->answer( iv_status = 307 ).
+    TRY.
+        mo_cut->send_text( iv_title = `Test` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `307 counted as sent` ).
   ENDMETHOD.
 
 
