@@ -1,3 +1,13 @@
-/node_modules/
-/TENANT-TEST.md
+# Local notes and drafts that are not part of the project
 /TASLAK.md
+/TENANT-TEST.md
+/*.local.md
+
+# Dependencies
+/node_modules/
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
