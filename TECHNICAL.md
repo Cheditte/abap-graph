@@ -559,7 +559,7 @@ Both comparisons only report. Nothing is assigned, removed or changed, in SAP or
 |---|---|---|
 | Application permission **`User.Read.All`** with admin consent | Reading users, managers, direct reports | Microsoft 365 / Entra administrator |
 | Application permission **`GroupMember.Read.All`** with admin consent | Groups and their members | Microsoft 365 / Entra administrator |
-| For the SAP account check: read access to `USR02`, `USR21` and `ADR6` | The program reads the user master directly | SAP authorization administrator |
+| For the SAP account check: read access to `USR02`, `USR21` and `ADR6`, and `S_USER_GRP` with activity 03 for the user groups | The program reads the user master directly; users of other groups are left out | SAP authorization administrator |
 | For the role check: `S_USER_AGR` with activity 03 for the role, read access to `AGR_USERS` | The program checks the role, then reads its users | SAP authorization administrator |
 | For the SU01 check: `S_USER_GRP` with activity 03 for the user groups | Read through `BAPI_USER_GET_DETAIL`, which checks it; users it refuses are left out | SAP authorization administrator |
 

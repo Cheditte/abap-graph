@@ -194,7 +194,8 @@ CLASS lcl_graph_users DEFINITION FINAL.
         lcx_graph.
 
     "! Dialog users of this SAP system with the e-mail address of their user
-    "! master. ACTIVE = X: not locked and valid today.
+    "! master. ACTIVE = X: not locked and valid today. Users whose user group
+    "! the caller may not display (S_USER_GRP, activity 03) are left out.
     CLASS-METHODS sap_users
       IMPORTING
         it_bname        TYPE lif_graph_users=>ty_bname_range OPTIONAL
@@ -631,6 +632,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
     TYPES:
       BEGIN OF lty_row,
         bname      TYPE usr02-bname,
+        class      TYPE usr02-class,
         uflag      TYPE usr02-uflag,
         gltgv      TYPE usr02-gltgv,
         gltgb      TYPE usr02-gltgb,
@@ -642,7 +644,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
     DATA ls_user TYPE lif_graph_users=>ty_sap_user.
 
     " Dialog users; the address comes from the user's address in SU01
-    SELECT u~bname u~uflag u~gltgv u~gltgb a~flgdefault a~smtp_addr
+    SELECT u~bname u~class u~uflag u~gltgv u~gltgb a~flgdefault a~smtp_addr
       FROM usr02 AS u
       INNER JOIN usr21 AS r ON r~bname = u~bname
       LEFT OUTER JOIN adr6 AS a ON a~addrnumber = r~addrnumber
@@ -654,6 +656,13 @@ CLASS lcl_graph_users IMPLEMENTATION.
     SORT lt_rows BY bname ASCENDING flgdefault DESCENDING.
     DELETE ADJACENT DUPLICATES FROM lt_rows COMPARING bname.
     LOOP AT lt_rows INTO ls_row.
+      " Only users the caller may display in SU01 (user group, activity 03)
+      AUTHORITY-CHECK OBJECT 'S_USER_GRP'
+        ID 'CLASS' FIELD ls_row-class
+        ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
       CLEAR ls_user.
       ls_user-bname = ls_row-bname.
       ls_user-mail = ls_row-smtp_addr.

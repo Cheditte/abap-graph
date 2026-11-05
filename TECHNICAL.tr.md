@@ -589,7 +589,7 @@ Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_
 |---|---|---|
 | Yönetici onaylı **`User.Read.All`** uygulama izni | Kullanıcıları, yöneticileri, bağlı çalışanları okumak | Microsoft 365 / Entra yöneticisi |
 | Yönetici onaylı **`GroupMember.Read.All`** uygulama izni | Gruplar ve üyeleri | Microsoft 365 / Entra yöneticisi |
-| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi | Program kullanıcı ana verisini doğrudan okur | SAP yetki yöneticisi |
+| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi ile kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Program kullanıcı ana verisini doğrudan okur; diğer grupların kullanıcıları listeye girmez | SAP yetki yöneticisi |
 | Rol kontrolü için rolde 03 aktiviteli `S_USER_AGR` ve `AGR_USERS` okuma yetkisi | Program önce rol yetkisini kontrol eder, sonra rolün kullanıcılarını okur | SAP yetki yöneticisi |
 | SU01 kontrolü için kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Veriler bu yetkiyi kontrol eden `BAPI_USER_GET_DETAIL` ile okunur; reddedilen kullanıcılar listeye girmez | SAP yetki yöneticisi |
 
