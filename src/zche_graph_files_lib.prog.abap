@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_FILES_LIB: SharePoint and OneDrive files through
 *& Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_FILES_LIB with type "Include
@@ -406,6 +406,8 @@ CLASS lcl_graph_files IMPLEMENTATION.
     IF sy-subrc = 0.
       lv_offset = lv_offset + 5.
       lv_parent = lv_parent+lv_offset.
+      " Microsoft sends this path percent-encoded (Q1%20%23Reports)
+      lv_parent = cl_http_utility=>unescape_url( escaped = lv_parent ).
     ELSE.
       CLEAR lv_parent.
     ENDIF.
@@ -461,6 +463,7 @@ CLASS lcl_graph_files IMPLEMENTATION.
     DATA lv_to TYPE string.
     DATA lv_total TYPE string.
     DATA lv_text TYPE string.
+    DATA lx_graph TYPE REF TO lcx_graph.
 
     CREATE OBJECT lo_writer.
     lo_writer->begin_object( ).
@@ -480,32 +483,47 @@ CLASS lcl_graph_files IMPLEMENTATION.
 
     lv_size = xstrlen( iv_content ).
     lv_total = lcl_graph_conv=>num( lv_size ).
-    WHILE lv_offset < lv_size.
-      lv_length = lv_size - lv_offset.
-      IF lv_length > mv_upload_chunk_bytes.
-        lv_length = mv_upload_chunk_bytes.
-      ENDIF.
-      lv_chunk = iv_content+lv_offset(lv_length).
-      lv_last = lv_offset + lv_length - 1.
-      lv_from = lcl_graph_conv=>num( lv_offset ).
-      lv_to = lcl_graph_conv=>num( lv_last ).
-      CLEAR lt_headers.
-      ls_header-name = 'Content-Type'.
-      ls_header-value = 'application/octet-stream'.
-      APPEND ls_header TO lt_headers.
-      ls_header-name = 'Content-Range'.
-      CONCATENATE `bytes ` lv_from '-' lv_to '/' lv_total INTO ls_header-value.
-      APPEND ls_header TO lt_headers.
-      ls_response = mo_client->request_url( iv_method = 'PUT' iv_url = lv_url iv_body = lv_chunk it_headers = lt_headers ).
-      lv_offset = lv_offset + lv_length.
-    ENDWHILE.
-
-    " The answer to the last piece is the new file
-    lv_text = lcl_graph_conv=>from_utf8( ls_response-body ).
-    IF lv_text IS NOT INITIAL.
-      lo_json = lcl_graph_json=>parse( lv_text ).
-      rs_item = item_from_json( io_json = lo_json iv_prefix = `` ).
-    ENDIF.
+    TRY.
+        WHILE lv_offset < lv_size.
+          lv_length = lv_size - lv_offset.
+          IF lv_length > mv_upload_chunk_bytes.
+            lv_length = mv_upload_chunk_bytes.
+          ENDIF.
+          lv_chunk = iv_content+lv_offset(lv_length).
+          lv_last = lv_offset + lv_length - 1.
+          lv_from = lcl_graph_conv=>num( lv_offset ).
+          lv_to = lcl_graph_conv=>num( lv_last ).
+          CLEAR lt_headers.
+          ls_header-name = 'Content-Type'.
+          ls_header-value = 'application/octet-stream'.
+          APPEND ls_header TO lt_headers.
+          ls_header-name = 'Content-Range'.
+          CONCATENATE `bytes ` lv_from '-' lv_to '/' lv_total INTO ls_header-value.
+          APPEND ls_header TO lt_headers.
+          ls_response = mo_client->request_url( iv_method = 'PUT' iv_url = lv_url iv_body = lv_chunk it_headers = lt_headers ).
+          lv_offset = lv_offset + lv_length.
+        ENDWHILE.
+        " The answer to the last piece is the new file; if Microsoft still
+        " expects bytes, the file is not there and must not be reported
+        lv_text = lcl_graph_conv=>from_utf8( ls_response-body ).
+        IF lv_text IS NOT INITIAL.
+          lo_json = lcl_graph_json=>parse( lv_text ).
+          rs_item = item_from_json( io_json = lo_json iv_prefix = `` ).
+        ENDIF.
+        IF rs_item-id IS INITIAL.
+          CONCATENATE `The upload of ` iv_path ` did not complete.` INTO lv_text.
+          RAISE EXCEPTION TYPE lcx_graph
+            EXPORTING
+              text = lv_text.
+        ENDIF.
+      CATCH lcx_graph INTO lx_graph.
+        " Close the upload session; it would otherwise stay open until it expires
+        TRY.
+            mo_client->request_url( iv_method = 'DELETE' iv_url = lv_url ).
+          CATCH lcx_graph.                                "#EC NO_HANDLER
+        ENDTRY.
+        RAISE EXCEPTION lx_graph.
+    ENDTRY.
   ENDMETHOD.
 
 
@@ -729,6 +747,7 @@ CLASS ltc_graph_files DEFINITION FINAL FOR TESTING.
     METHODS library_missing FOR TESTING.
     METHODS upload_small FOR TESTING RAISING lcx_graph.
     METHODS upload_large FOR TESTING RAISING lcx_graph.
+    METHODS upload_not_complete FOR TESTING.
     METHODS download_by_url FOR TESTING RAISING lcx_graph.
     METHODS list_folder FOR TESTING RAISING lcx_graph.
     METHODS ensure_folders FOR TESTING RAISING lcx_graph.
@@ -835,6 +854,32 @@ CLASS ltc_graph_files IMPLEMENTATION.
       act = ls_request-uri
       exp = `/v1.0/drives/D1/root:/Reports/2026/a%20b.txt:/content?@microsoft.graph.conflictBehavior=replace` ).
     cl_aunit_assert=>assert_equals( act = ls_request-body exp = `hello` ).
+  ENDMETHOD.
+
+
+  METHOD upload_not_complete.
+    " The last piece is answered with "more expected": no file, an error, and
+    " the session is closed
+    DATA lv_content TYPE xstring.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_count TYPE i.
+
+    mo_cut->set_limits( iv_max_direct_bytes = 5 iv_upload_chunk_bytes = 8 ).
+    lv_content = lcl_graph_conv=>to_utf8( `ABCDEFGHIJ` ).
+    mo_http->answer( iv_status = 200 iv_body = `{"uploadUrl":"https://contoso.sharepoint.com/up?k=1"}` ).
+    mo_http->answer( iv_status = 202 iv_body = `{"nextExpectedRanges":["8-"]}` ).
+    mo_http->answer( iv_status = 202 iv_body = `{"nextExpectedRanges":["9-"]}` ).
+    mo_http->answer( iv_status = 204 ).
+    TRY.
+        mo_cut->upload( iv_path = `big.bin` iv_content = lv_content iv_conflict = `replace` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `an incomplete upload was reported as done` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*did not complete*' ).
+    lv_count = lines( mo_http->mt_requests ).
+    READ TABLE mo_http->mt_requests INDEX lv_count INTO ls_request.
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `DELETE` ).
   ENDMETHOD.
 
 
