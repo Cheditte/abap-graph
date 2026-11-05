@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.7.2, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.2, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -604,6 +604,8 @@ Modül, `ZCHE_GRAPH_CALENDAR_LIB` include'u (`LCL_GRAPH_CALENDAR` sınıfı) ve 
 
 Tarih ve saatler, bir SAP saat dilimindeki SAP tarih ve saatleridir; varsayılan, kullanıcının saat dilimidir (`SY-ZONLO`, SU01'de). Microsoft'a UTC olarak gider ve aynı SAP saat dilimine çevrilerek döner; yaz saati SAP'nin kendi saat dilimi tablolarıyla hesaplanır.
 
+Outlook bir etkinliği, açıldığı posta kutusunun saat diliminde gösterir (Outlook web: **Ayarlar → Genel → Dil ve saat**). Kimsenin ayarlamadığı bir paylaşılan posta kutusu UTC gösterir: `TURKEY` ile 14:00'e oluşturulan etkinlik orada 11:00'de görünür, İstanbul'a ayarlı bir kullanıcı ise 14:00 görür. Etkinlik aynıdır; yalnız gösterim farklıdır.
+
 ### Takvim modülünün ek gereksinimleri
 
 | Ne | Neden | Kim |
@@ -745,7 +747,9 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 - **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı, her paylaşılan kutuda olduğu gibi; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yok. Karşılaştırmanın kendisi yalnız birim testiyle sınandı.
 - **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi. Aynı anahtarla tekrar çalıştırılınca aynı etkinlik döndü; takvimde yine tek etkinlik vardı.
 - **Teams toplantıları ve boş zaman (5 Kasım, 0.7.0):** lisanslı bir kullanıcının takviminde, katılımcısız, iki kez tekrarlanan haftalık bir Teams toplantısı: iki tekrar da katılma bağlantısıyla geri geldi, sonra seri silindi. Boş zaman araması iki posta kutusu için 09:00–09:30'u buldu; toplantının olduğu yarım saatte boş zaman bulmadı.
-- **Teams kanal mesajları:** yalnız birim testleri ve var olmayan bir SM59 hedefinin hatası. Henüz gerçek bir kanal yok.
+- **Takvim yeniden, 0.7.2 (5 Kasım):** lisanslı bir kullanıcının takviminde, 15:00–15:30 `TURKEY`, iki kez tekrarlanan haftalık bir Teams toplantısı: SAP iki tekrarı da katılma bağlantısıyla listeledi; kullanıcının İstanbul'a ayarlı Outlook'u 15:00–15:30'u **Katıl** düğmesiyle gösterdi. Boş zaman araması 14:00–16:00 penceresinde 14:00–14:30'u buldu; sonra seri silindi ve o haftanın listesi boş döndü. Daha önce 14:00'e oluşturulan bir etkinlik, bir paylaşılan posta kutusunun Outlook'unda 11:00'de görünmüştü: o kutu UTC'ye ayarlıydı (bkz. [Outlook takvimi](#outlook-takvimi)).
+- **`"SAP, Test" <sap@…>` adresine e-posta (0.7.2):** tek alıcı; Microsoft kabul etti. Gelen kutusunda teslim ayrıca kontrol edilmedi.
+- **Teams kanal mesajları (0.7.2):** bir kanalda Workflows web kancası, adresi G tipi bir SM59 hedefinde (adresin tamamı yol önekine sığdı). `ZCHE_GRAPH_TEAMS` iki ad/değer satırı ve sistem, kullanıcı, zaman bilgisiyle bir `warning` kartı gönderdi: kart kanalda, başlığı uyarı renginde göründü.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 

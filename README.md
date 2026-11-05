@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.7.2, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.2, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -566,6 +566,8 @@ The module consists of the include `ZCHE_GRAPH_CALENDAR_LIB` (class `LCL_GRAPH_C
 
 Dates and times are SAP dates and times in an SAP time zone, by default the user's (`SY-ZONLO`, set in SU01). They travel to Microsoft as UTC and come back in the same SAP time zone, so summer time is handled by SAP's own time zone tables.
 
+Outlook shows an event in the time zone of the mailbox it is opened in (Outlook on the web: **Settings → General → Language and time**). A shared mailbox that nobody has set up shows UTC: an event created for 14:00 `TURKEY` appears there at 11:00, while a user set to Istanbul sees 14:00. The event is the same; only the display differs.
+
 ### What the calendar module needs in addition
 
 | What | Why | Who |
@@ -707,7 +709,9 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 - **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled, as for every shared mailbox; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial have no e-mail address in SU01. The comparison itself is covered only by a unit test.
 - **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times. Run again with the same key, it got the same event back; the calendar still had one.
 - **Teams meetings and free time (5 November, 0.7.0):** in a licensed user's calendar, a weekly Teams meeting twice, without attendees: both occurrences came back with the join link, then the series was deleted. The free-time search found 09:00–09:30 for two mailboxes, and no time in the half hour of the meeting.
-- **Teams channel messages:** only unit tests, and the error for an SM59 destination that does not exist. No real channel yet.
+- **Calendar again, 0.7.2 (5 November):** a weekly Teams meeting twice, 15:00–15:30 `TURKEY`, in a licensed user's calendar: SAP listed both occurrences with the join link, and the user's Outlook (set to Istanbul) showed 15:00–15:30 with a **Join** button. The free-time search found 14:00–14:30 in a window of 14:00–16:00; then the series was deleted and the list of that week was empty. An earlier event created for 14:00 had appeared at 11:00 in a shared mailbox's Outlook: that mailbox was set to UTC (see [Outlook calendar](#outlook-calendar)).
+- **E-mail to `"SAP, Test" <sap@…>` (0.7.2):** one recipient, accepted by Microsoft. Delivery was not checked in the inbox.
+- **Teams channel messages (0.7.2):** a Workflows webhook in a channel, its address in an SM59 destination of type G (the whole address fit into the path prefix). `ZCHE_GRAPH_TEAMS` sent a `warning` card with two name/value lines and the system, user and time: it appeared in the channel with the title in the warning colour.
 
 Found on the tenant and fixed in 0.5.1:
 
