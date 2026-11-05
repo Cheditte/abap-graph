@@ -1,0 +1,10 @@
+# Local notes and drafts that are not part of the project
+/TASLAK.md
+/TENANT-TEST.md
+/*.local.md
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
