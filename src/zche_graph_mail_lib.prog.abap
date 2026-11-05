@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL_LIB: e-mail through Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_MAIL_LIB with type "Include
@@ -92,6 +92,9 @@ INTERFACE lif_graph_mail.
   " Microsoft accepts at most 4 MB per request; Base64 makes attachments a third
   " larger. Up to this sum of attachments the mail goes in one request.
   CONSTANTS max_direct_bytes TYPE i VALUE 2900000.
+  " And the request itself, as JSON, may have at most this many bytes: quotes
+  " and line breaks in the text grow when they are escaped
+  CONSTANTS max_request_bytes TYPE i VALUE 4000000.
   " A larger mail becomes a draft. Its attachments under 3 MB are added one
   " request each; from 3 MB on through an upload session, as Microsoft
   " describes it (3 to 150 MB)
@@ -207,12 +210,14 @@ CLASS lcl_graph_mail DEFINITION FINAL.
       IMPORTING
         iv_max_direct_bytes   TYPE i
         iv_upload_chunk_bytes TYPE i
-        iv_upload_min_bytes   TYPE i.
+        iv_upload_min_bytes   TYPE i
+        iv_max_request_bytes  TYPE i DEFAULT lif_graph_mail=>max_request_bytes.
 
   PRIVATE SECTION.
     DATA mo_client TYPE REF TO lcl_graph_client.
     DATA mv_mailbox TYPE string.
     DATA mv_max_direct_bytes TYPE i.
+    DATA mv_max_request_bytes TYPE i.
     DATA mv_upload_chunk_bytes TYPE i.
     DATA mv_upload_min_bytes TYPE i.
 
@@ -282,6 +287,7 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     " A guest address (name_domain#EXT#@tenant) would end the URL at the #
     REPLACE ALL OCCURRENCES OF '#' IN mv_mailbox WITH '%23'.
     mv_max_direct_bytes = lif_graph_mail=>max_direct_bytes.
+    mv_max_request_bytes = lif_graph_mail=>max_request_bytes.
     mv_upload_chunk_bytes = lif_graph_mail=>upload_chunk_bytes.
     mv_upload_min_bytes = lif_graph_mail=>upload_min_bytes.
   ENDMETHOD.
@@ -289,6 +295,7 @@ CLASS lcl_graph_mail IMPLEMENTATION.
 
   METHOD set_limits.
     mv_max_direct_bytes = iv_max_direct_bytes.
+    mv_max_request_bytes = iv_max_request_bytes.
     mv_upload_chunk_bytes = iv_upload_chunk_bytes.
     mv_upload_min_bytes = iv_upload_min_bytes.
   ENDMETHOD.
@@ -603,6 +610,12 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     lo_writer->add_boolean( iv_name = `saveToSentItems` iv_value = lv_save ).
     lo_writer->end_object( ).
     lv_json = lo_writer->result( ).
+    " The estimate above leaves out escaping: the real size decides
+    lv_body = lcl_graph_conv=>to_utf8( lv_json ).
+    IF xstrlen( lv_body ) > mv_max_request_bytes.
+      send_as_draft( is_mail ).
+      RETURN.
+    ENDIF.
     lv_path = path( `/sendMail` ).
     mo_client->send_json( iv_method = 'POST' iv_path = lv_path iv_json = lv_json ).
   ENDMETHOD.
@@ -1008,6 +1021,7 @@ CLASS ltc_graph_mail DEFINITION FINAL FOR TESTING.
     METHODS send_small FOR TESTING RAISING lcx_graph.
     METHODS send_large FOR TESTING RAISING lcx_graph.
     METHODS attachment_under_3mb FOR TESTING RAISING lcx_graph.
+    METHODS escaped_body_too_large FOR TESTING RAISING lcx_graph.
     METHODS draft_deleted_on_error FOR TESTING.
     METHODS no_recipient FOR TESTING.
     METHODS list_unread FOR TESTING RAISING lcx_graph.
@@ -1137,6 +1151,31 @@ CLASS ltc_graph_mail IMPLEMENTATION.
     ls_request = request_at( 4 ).
     cl_aunit_assert=>assert_equals( act = ls_request-method exp = `DELETE` ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages/M1` ).
+  ENDMETHOD.
+
+
+  METHOD escaped_body_too_large.
+    " 40 quotes are 40 bytes, but 80 in JSON: with a request limit of 100
+    " bytes the mail becomes a draft instead of one /sendMail
+    DATA ls_mail TYPE lif_graph_mail=>ty_mail.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    mo_cut->set_limits( iv_max_direct_bytes   = 1000
+                        iv_upload_chunk_bytes = 4
+                        iv_upload_min_bytes   = 20
+                        iv_max_request_bytes  = 100 ).
+    ls_mail-subject = `Q`.
+    ls_mail-to = lcl_graph_mail=>addresses( `derya@b.com` ).
+    DO 40 TIMES.
+      CONCATENATE ls_mail-body `"` INTO ls_mail-body.
+    ENDDO.
+    mo_http->answer( iv_status = 201 iv_body = `{"id":"M1"}` ).
+    mo_http->answer( iv_status = 202 ).
+    mo_cut->send( ls_mail ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages` ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages/M1/send` ).
   ENDMETHOD.
 
 

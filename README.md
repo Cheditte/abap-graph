@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.7.3, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.4, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -557,8 +557,8 @@ The module consists of the include `ZCHE_GRAPH_CALENDAR_LIB` (class `LCL_GRAPH_C
 
 - **Create an event** in the calendar of a user or a shared mailbox: subject, text, time or whole days, location, required and optional attendees (they get an invitation), reminder, "show as", categories.
 - **Your own key** (`transaction_id`), for example the order number: Microsoft creates an event only once per key, so running the same job twice does not make two events. The same key for an event with other details is refused (`ErrorDuplicateTransactionId`); this was seen on the test tenant.
-- **List** the events of a period, with the occurrences of series one by one.
-- **Change** an event (attendees get the update), **cancel** it (attendees get the cancellation, with a comment) or **delete** it from this calendar only.
+- **List** the events of a period, with the occurrences of series one by one. A list gives only the first lines of the text (`preview`); one event read by its ID gives the full text.
+- **Change** an event (attendees get the update), **cancel** it (attendees get the cancellation, with a comment) or **delete** it. Deleting a meeting from the organizer's calendar also cancels it for the attendees, without a comment: Microsoft does that, it cannot be avoided.
 - **Teams meeting:** with `teams_meeting = X` Microsoft opens a Teams meeting and puts the join link into the invitation and into `join_url`. The organizer is the mailbox, so it needs a Teams licence; a shared mailbox has none.
 - **Series:** daily, weekly or monthly, every n days, weeks or months, until a date or n times. A weekly series falls on the weekday of the first start, a monthly one on its day of the month, both counted in UTC; in a time zone with summer time a series keeps its UTC time, so it moves by an hour locally twice a year.
 - **Who comes:** the list gives each attendee's answer (`accepted`, `declined`, `tentativelyAccepted`, `none`).
@@ -591,7 +591,7 @@ Run `ZCHE_GRAPH_CALENDAR` with the tenant and the mailbox whose calendar to use.
 | **Create an event** | Date, start and end time or "All day", subject; optionally location, attendees (`a@x.com; b@x.com`), text, reminder, your key; "Teams meeting"; repeat, every, until or times |
 | **Find a free time** | Date, start and end of the window, length in minutes, attendees |
 | **Cancel** | Event ID (from the list) and a comment |
-| **Delete from this calendar** | Event ID |
+| **Delete** | Event ID |
 
 ### Use it in your own program
 
@@ -746,6 +746,17 @@ And in 0.7.2:
 Found on the tenant and fixed in 0.7.3:
 
 - The "Time" line that `ZCHE_GRAPH_TEAMS` adds showed the server's clock next to the user's time zone (on the test system UTC, labelled CET, an hour off). It now shows the user's own date and time. For the same reason the date that `ZCHE_GRAPH_CALENDAR` proposes is now the user's today, not the server's.
+
+Found by a second code review and fixed in 0.7.4:
+
+- **Calendar:** an event read and written back lost its text: the read took the short preview, and the update wrote it over the full text (and the Teams join details in it). Now the read keeps the full text with its kind (HTML or text), and the preview is a field of its own.
+- **Calendar:** "Delete from this calendar" promised that attendees are not told; in the organizer's calendar Microsoft sends them a cancellation. The program and the description now say so.
+- **Calendar:** with a maximum number of events, all-day events of the day before took places in it, so fewer events came back than there were.
+- **Lists:** blanks inside a choice of a multiple-choice column were merged (`ACME  LTD` became `ACME LTD`).
+- **E-mail:** whether a mail fits into one request is now decided on the request itself, escaping included; many quotes or line breaks in the text could take it over 4 MB.
+- **Core:** SAP's HTTP client is told not to follow redirects itself, so a 3xx always reaches the error described above.
+- **Teams:** a redirect (3xx) was reported as "OK Sent"; only 2xx counts now.
+- **Excel:** a start cell like `AAAAAAAA1` or `A99999999999` stopped the program with an overflow; a block that does not fit on a sheet is now an error.
 
 ### Unit tests and made-up credentials, 2 November 2026
 

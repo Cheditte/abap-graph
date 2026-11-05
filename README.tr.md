@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.7.3, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.4, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -595,8 +595,8 @@ Modül, `ZCHE_GRAPH_CALENDAR_LIB` include'u (`LCL_GRAPH_CALENDAR` sınıfı) ve 
 
 - **Etkinlik oluşturma:** bir kullanıcının ya da paylaşılan posta kutusunun takviminde. Konu, metin, saat ya da tüm gün, yer, zorunlu ve isteğe bağlı katılımcılar (davet alırlar), hatırlatma, "farklı göster", kategoriler.
 - **Kendi anahtarınız** (`transaction_id`), örneğin emir numarası: Microsoft bir anahtar için yalnız bir etkinlik oluşturur. Aynı iş iki kez çalışsa da iki etkinlik olmaz. Aynı anahtar başka ayrıntılı bir etkinlik için kullanılırsa reddedilir (`ErrorDuplicateTransactionId`); bu test tenant'ında görüldü.
-- **Listeleme:** bir dönemin etkinlikleri; yinelenen etkinliklerin her tekrarı ayrı satırdır.
-- **Değiştirme** (katılımcılara güncelleme gider), **iptal** (katılımcılara açıklamayla iptal gider) ya da yalnız bu takvimden **silme**.
+- **Listeleme:** bir dönemin etkinlikleri; yinelenen etkinliklerin her tekrarı ayrı satırdır. Liste metnin yalnız ilk satırlarını verir (`preview`); ID'siyle okunan tek etkinlik tam metni verir.
+- **Değiştirme** (katılımcılara güncelleme gider), **iptal** (katılımcılara açıklamayla iptal gider) ya da **silme**. Düzenleyenin takviminden silinen toplantı katılımcılar için de açıklamasız iptal edilir: bunu Microsoft yapar, engellenemez.
 - **Teams toplantısı:** `teams_meeting = X` ile Microsoft bir Teams toplantısı açar ve katılma bağlantısını davete ve `join_url` alanına koyar. Düzenleyici posta kutusudur; Teams lisansı gerekir, paylaşılan kutunun lisansı yoktur.
 - **Tekrar:** günlük, haftalık ya da aylık; her n gün, hafta ya da ay; bir tarihe kadar ya da n kez. Haftalık seri ilk başlangıcın haftanın gününe, aylık seri ayın gününe düşer; ikisi de UTC'ye göre hesaplanır. Yaz saati uygulanan bir saat diliminde seri UTC saatini korur, bu yüzden yerel saatte yılda iki kez bir saat kayar.
 - **Kim geliyor:** liste her katılımcının cevabını verir (`accepted`, `declined`, `tentativelyAccepted`, `none`).
@@ -629,7 +629,7 @@ Sınırlamayı e-posta modülünde anlatıldığı gibi yapın; RBAC for Applica
 | **Etkinlik oluştur** | Tarih, başlangıç ve bitiş saati ya da "Tüm gün", konu; isteğe bağlı yer, katılımcılar (`a@x.com; b@x.com`), metin, hatırlatma, anahtarınız; "Teams toplantısı"; tekrar, her, bitiş tarihi ya da kez |
 | **Boş zaman bul** | Tarih, aralığın başı ve sonu, dakika olarak süre, katılımcılar |
 | **İptal et** | Etkinlik ID (listeden) ve açıklama |
-| **Bu takvimden sil** | Etkinlik ID |
+| **Sil** | Etkinlik ID |
 
 ### Kendi programınızda kullanmak
 
@@ -784,6 +784,17 @@ Kod incelemesinde bulunup 0.7.1'de düzeltilenler:
 Tenant'ta bulunan ve 0.7.3'te düzeltilen:
 
 - `ZCHE_GRAPH_TEAMS`'in eklediği "Zaman" satırı, sunucunun saatini kullanıcının saat dilimi adıyla gösteriyordu (test sisteminde UTC saati CET etiketiyle, bir saat farkla). Artık kullanıcının kendi tarih ve saatini gösteriyor. Aynı sebeple `ZCHE_GRAPH_CALENDAR`'ın önerdiği tarih artık sunucunun değil, kullanıcının bugünü.
+
+İkinci bir kod incelemesinde bulunan ve 0.7.4'te düzeltilen:
+
+- **Takvim:** okunup geri yazılan etkinlik metnini kaybediyordu: okuma kısa önizlemeyi alıyor, güncelleme onu tam metnin (ve içindeki Teams katılma bilgilerinin) üzerine yazıyordu. Artık okuma tam metni türüyle (HTML ya da metin) koruyor; önizleme ayrı bir alan.
+- **Takvim:** "Bu takvimden sil" katılımcılara haber verilmeyeceğini söylüyordu; düzenleyenin takviminde Microsoft onlara iptal gönderiyor. Program ve açıklama artık bunu söylüyor.
+- **Takvim:** en çok etkinlik sayısı verildiğinde önceki günün tüm gün etkinlikleri bu sayıdan yer kaplıyordu; olandan az etkinlik dönüyordu.
+- **Listeler:** çoklu seçim sütununda bir seçimin içindeki boşluklar birleşiyordu (`ACME  LTD`, `ACME LTD` oluyordu).
+- **E-posta:** e-postanın tek isteğe sığıp sığmadığına artık kaçışlarıyla birlikte isteğin kendisine bakılarak karar veriliyor; metindeki çok sayıda tırnak ya da satır sonu onu 4 MB'ın üstüne çıkarabiliyordu.
+- **Çekirdek:** SAP'nin HTTP istemcisine yönlendirmeleri kendisinin takip etmemesi söyleniyor; böylece 3xx her zaman yukarıda anlatılan hataya ulaşıyor.
+- **Teams:** yönlendirme (3xx) "OK Sent" olarak bildiriliyordu; artık yalnız 2xx sayılıyor.
+- **Excel:** `AAAAAAAA1` ya da `A99999999999` gibi bir başlangıç hücresi programı taşmayla durduruyordu; sayfaya sığmayan blok artık bir hata.
 
 ### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
 

@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR: Outlook calendar through Microsoft Graph
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_CALENDAR_LIB
@@ -138,7 +138,7 @@ CLASS lcl_text IMPLEMENTATION.
     add( EXPORTING iv_name = 'P_UNTIL' iv_en = 'Repeat until' iv_tr = 'Şu tarihe kadar' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_TIMES' iv_en = 'Or this many times' iv_tr = 'Ya da bu kadar kez' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'R_CANCEL' iv_en = 'Cancel (attendees are told)' iv_tr = 'İptal et (katılımcılara gider)' CHANGING ct_texts = lt_texts ).
-    add( EXPORTING iv_name = 'R_DELETE' iv_en = 'Delete from this calendar' iv_tr = 'Bu takvimden sil' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'R_DELETE' iv_en = 'Delete (attendees may be told)' iv_tr = 'Sil (katılımcılara gidebilir)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_FROM' iv_en = 'Date (from)' iv_tr = 'Tarih (başlangıç)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_TO' iv_en = 'Date to (empty = same day)' iv_tr = 'Bitiş tarihi (boş = aynı gün)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_TSTART' iv_en = 'Start time' iv_tr = 'Başlangıç saati' CHANGING ct_texts = lt_texts ).
@@ -368,7 +368,9 @@ CLASS lcl_app IMPLEMENTATION.
         lv_text = lcl_text=>get( iv_en = `OK Cancelled; the attendees get a message.` iv_tr = `OK İptal edildi; katılımcılara bildirim gider.` ).
       ELSE.
         lo_calendar->delete( lv_value ).
-        lv_text = lcl_text=>get( iv_en = `OK Deleted from this calendar.` iv_tr = `OK Bu takvimden silindi.` ).
+        " In the organizer's calendar Microsoft cancels the meeting for everyone
+        lv_text = lcl_text=>get( iv_en = `OK Deleted. If this mailbox organized the meeting, the attendees got a cancellation.`
+                                 iv_tr = `OK Silindi. Toplantıyı bu posta kutusu düzenlediyse katılımcılara iptal gitti.` ).
       ENDIF.
       WRITE: / lv_text.
     ENDIF.

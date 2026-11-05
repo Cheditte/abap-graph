@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR_LIB: Outlook calendar through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CALENDAR_LIB with type
@@ -47,6 +47,8 @@ INTERFACE lif_graph_calendar.
     END OF ty_free_busy,
     ty_free_busies TYPE STANDARD TABLE OF ty_free_busy WITH DEFAULT KEY.
 
+  " BODY and HTML: the full text and its kind; only EVENT( ) brings them.
+  " PREVIEW: its first lines as plain text, read only; EVENTS( ) brings only this.
   " SHOW_AS: free, tentative, busy, oof or workingElsewhere.
   " An all-day event takes START_DATE to END_DATE (both included); times are
   " ignored. REMINDER: minutes before the start; -1 = no reminder.
@@ -65,6 +67,7 @@ INTERFACE lif_graph_calendar.
       subject        TYPE string,
       body           TYPE string,
       html           TYPE abap_bool,
+      preview        TYPE string,
       start_date     TYPE d,
       start_time     TYPE t,
       end_date       TYPE d,
@@ -135,7 +138,8 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
         lcx_graph.
 
     "! Sends subject, body, time, location, attendees and the rest again;
-    "! attendees get an updated invitation
+    "! attendees get an updated invitation. Start from EVENT( ): an empty BODY
+    "! leaves the text as it is, so an event from EVENTS( ) keeps its text too.
     METHODS update
       IMPORTING
         iv_id    TYPE string
@@ -151,7 +155,9 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
       RAISING
         lcx_graph.
 
-    "! Removes the event from this calendar only; attendees are not told
+    "! Removes the event from this calendar. In the organizer's calendar
+    "! Microsoft sends the attendees a cancellation, without a comment: use
+    "! CANCEL( ) for that.
     METHODS delete
       IMPORTING
         iv_id TYPE string
@@ -582,8 +588,18 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     rs_event-id = io_json->get( lv_field ).
     CONCATENATE iv_prefix `subject` INTO lv_field.
     rs_event-subject = io_json->get( lv_field ).
+    " A list has only the preview; written back as the body it would replace
+    " the full text (and the Teams join block in it)
     CONCATENATE iv_prefix `bodyPreview` INTO lv_field.
+    rs_event-preview = io_json->get( lv_field ).
+    CONCATENATE iv_prefix `body/content` INTO lv_field.
     rs_event-body = io_json->get( lv_field ).
+    CONCATENATE iv_prefix `body/contentType` INTO lv_field.
+    lv_value = io_json->get( lv_field ).
+    TRANSLATE lv_value TO LOWER CASE.
+    IF lv_value = `html`.
+      rs_event-html = abap_true.
+    ENDIF.
     CONCATENATE iv_prefix `isAllDay` INTO lv_field.
     lv_value = io_json->get( lv_field ).
     IF lv_value = `true`.
@@ -677,8 +693,9 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
 
 
   METHOD events.
-    DATA lt_pages TYPE lcl_graph_client=>ty_pages.
     DATA lo_page TYPE REF TO lcl_graph_json.
+    DATA lv_next TYPE string.
+    DATA lv_text TYPE string.
     DATA ls_event TYPE lif_graph_calendar=>ty_event.
     DATA lt_headers TYPE tihttpnvp.
     DATA lv_from TYPE string.
@@ -707,9 +724,11 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
       INTO lv_rest.
     lv_path = path( lv_rest ).
     lt_headers = utc_headers( ).
-    lv_max_pages = iv_max DIV 100 + 2.
-    lt_pages = mo_client->get_pages( iv_path = lv_path iv_max_pages = lv_max_pages iv_max_items = iv_max it_headers = lt_headers ).
-    LOOP AT lt_pages INTO lo_page.
+    " Page by page here, not with GET_PAGES: IV_MAX counts the events that are
+    " kept, and some all-day events of the days around are left out below
+    lv_max_pages = iv_max DIV 100 + 10.
+    DO lv_max_pages TIMES.
+      lo_page = mo_client->get_json( iv_path = lv_path it_headers = lt_headers ).
       lv_count = lo_page->count( `value` ).
       DO lv_count TIMES.
         lv_index = sy-index - 1.
@@ -728,7 +747,18 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
           RETURN.
         ENDIF.
       ENDDO.
-    ENDLOOP.
+      lv_next = lo_page->get( `@odata.nextLink` ).
+      IF lv_next IS INITIAL.
+        RETURN.
+      ENDIF.
+      lv_path = lcl_graph_client=>path_of_url( lv_next ).
+    ENDDO.
+    lv_number = lcl_graph_conv=>num( lv_max_pages ).
+    CONCATENATE `Microsoft Graph has more than ` lv_number ` pages of events; the list would not be complete.` INTO lv_text.
+    RAISE EXCEPTION TYPE lcx_graph
+      EXPORTING
+        text = lv_text
+        hint = `Choose fewer days or ask for fewer events.`.
   ENDMETHOD.
 
 
@@ -952,6 +982,9 @@ CLASS ltc_graph_calendar DEFINITION FINAL FOR TESTING.
     METHODS free_time FOR TESTING RAISING lcx_graph.
     METHODS free_time_nobody FOR TESTING.
     METHODS all_day_other_zone FOR TESTING RAISING lcx_graph.
+    METHODS update_keeps_body FOR TESTING RAISING lcx_graph.
+    METHODS listed_keeps_body FOR TESTING RAISING lcx_graph.
+    METHODS max_after_filter FOR TESTING RAISING lcx_graph.
 
     METHODS request_at
       IMPORTING
@@ -1183,6 +1216,77 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
     ENDTRY.
     cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
     cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*Unknown repeat*' ).
+  ENDMETHOD.
+
+
+  METHOD update_keeps_body.
+    " Read, change the subject, write back: the full HTML text goes back as
+    " it was, not the short preview
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_answer TYPE string.
+
+    CONCATENATE `{"id":"E5","subject":"Bakım","body":{"contentType":"html","content":"<p>Uzun metin</p><p>Teams</p>"},`
+                `"bodyPreview":"Uzun metin","isAllDay":false,`
+                `"start":{"dateTime":"2026-11-10T06:00:00.0000000"},"end":{"dateTime":"2026-11-10T07:30:00.0000000"}}` INTO lv_answer.
+    mo_http->answer( iv_status = 200 iv_body = lv_answer ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    ls_event = mo_cut->event( `E5` ).
+    cl_aunit_assert=>assert_equals( act = ls_event-preview exp = `Uzun metin` ).
+    cl_aunit_assert=>assert_equals( act = ls_event-html exp = abap_true ).
+    ls_event-subject = `Bakım ertelendi`.
+    mo_cut->update( iv_id = `E5` is_event = ls_event ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `PATCH` ).
+    cl_aunit_assert=>assert_char_cp(
+      act = ls_request-body
+      exp = '{"subject":"Bakım ertelendi","body":{"contentType":"HTML","content":"<p>Uzun metin</p><p>Teams</p>"},*' ).
+  ENDMETHOD.
+
+
+  METHOD listed_keeps_body.
+    " A listed event has only the preview: its update sends no body at all
+    DATA lt_events TYPE lif_graph_calendar=>ty_events.
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_answer TYPE string.
+
+    CONCATENATE `{"value":[{"id":"E6","subject":"Bakım","bodyPreview":"Uzun metin","isAllDay":false,`
+                `"start":{"dateTime":"2026-11-10T06:00:00.0000000"},"end":{"dateTime":"2026-11-10T07:30:00.0000000"}}]}` INTO lv_answer.
+    mo_http->answer( iv_status = 200 iv_body = lv_answer ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    lt_events = mo_cut->events( iv_from = '20261110' iv_to = '20261110' ).
+    READ TABLE lt_events INDEX 1 INTO ls_event.
+    cl_aunit_assert=>assert_equals( act = ls_event-preview exp = `Uzun metin` ).
+    cl_aunit_assert=>assert_initial( act = ls_event-body ).
+    mo_cut->update( iv_id = ls_event-id is_event = ls_event ).
+    ls_request = request_at( 3 ).
+    IF ls_request-body CS `"body"`.
+      cl_aunit_assert=>fail( msg = `the preview was written back as the body` ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD max_after_filter.
+    " Page 1: an all-day event of the day before (left out) and one event;
+    " with IV_MAX = 2 the second page is read for the second event
+    DATA lt_events TYPE lif_graph_calendar=>ty_events.
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA lv_answer TYPE string.
+    DATA lv_count TYPE i.
+
+    CONCATENATE `{"value":[{"id":"D0","isAllDay":true,"start":{"dateTime":"2026-11-09T00:00:00.0000000"},"end":{"dateTime":"2026-11-10T00:00:00.0000000"}},`
+                `{"id":"E1","isAllDay":false,"start":{"dateTime":"2026-11-10T06:00:00.0000000"},"end":{"dateTime":"2026-11-10T07:00:00.0000000"}}],`
+                `"@odata.nextLink":"https://graph.microsoft.com/v1.0/users/sap@contoso.com/calendarView?$skip=2"}` INTO lv_answer.
+    mo_http->answer( iv_status = 200 iv_body = lv_answer ).
+    CONCATENATE `{"value":[{"id":"E2","isAllDay":false,"start":{"dateTime":"2026-11-10T08:00:00.0000000"},`
+                `"end":{"dateTime":"2026-11-10T09:00:00.0000000"}}]}` INTO lv_answer.
+    mo_http->answer( iv_status = 200 iv_body = lv_answer ).
+    lt_events = mo_cut->events( iv_from = '20261110' iv_to = '20261110' iv_max = 2 ).
+    lv_count = lines( lt_events ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
+    READ TABLE lt_events INDEX 2 INTO ls_event.
+    cl_aunit_assert=>assert_equals( act = ls_event-id exp = `E2` ).
   ENDMETHOD.
 
 

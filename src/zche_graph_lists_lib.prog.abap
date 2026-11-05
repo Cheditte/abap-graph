@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_LISTS_LIB: SharePoint lists through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_LISTS_LIB with type "Include
@@ -596,7 +596,8 @@ CLASS lcl_graph_list IMPLEMENTATION.
         io_writer->begin_array( ls_field-name ).
         SPLIT ls_field-value AT ';' INTO TABLE lt_values.
         LOOP AT lt_values INTO lv_value.
-          CONDENSE lv_value.
+          " Only the blanks around a choice go; "ACME  LTD" stays as it is
+          lv_value = lcl_graph_conv=>trim( lv_value ).
           IF lv_value IS NOT INITIAL.
             io_writer->add_string( iv_value = lv_value ).
           ENDIF.
@@ -910,6 +911,7 @@ CLASS ltc_graph_list DEFINITION FINAL FOR TESTING.
     METHODS upsert_number_key FOR TESTING RAISING lcx_graph.
     METHODS clear_fields FOR TESTING RAISING lcx_graph.
     METHODS one_item_and_delete FOR TESTING RAISING lcx_graph.
+    METHODS choice_inner_blanks FOR TESTING RAISING lcx_graph.
 
     METHODS answer_columns.
 
@@ -1201,6 +1203,21 @@ CLASS ltc_graph_list IMPLEMENTATION.
     ls_request = request_at( 3 ).
     cl_aunit_assert=>assert_equals( act = ls_request-method exp = `DELETE` ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/sites/S1/lists/L1/items/7` ).
+  ENDMETHOD.
+
+
+  METHOD choice_inner_blanks.
+    " Blanks around a choice go, blanks inside it stay
+    DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    lt_fields = lcl_graph_list=>fields_from_text( `Tags=ACME  LTD;  A  B ` ).
+    mo_cut->update( iv_id = `9` it_fields = lt_fields ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-body
+                                    exp = `{"Tags@odata.type":"Collection(Edm.String)","Tags":["ACME  LTD","A  B"]}` ).
   ENDMETHOD.
 
 

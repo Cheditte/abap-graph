@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,7 +30,7 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.7.3`.
+  CONSTANTS version TYPE string VALUE `0.7.4`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
@@ -1313,6 +1313,9 @@ CLASS lcl_graph_http IMPLEMENTATION.
     " Never show a logon popup or keep cookies; a background job has no one to answer
     lo_client->propertytype_logon_popup = if_http_client=>co_disabled.
     lo_client->propertytype_accept_cookie = if_http_client=>co_disabled.
+    " SAP would follow a redirect itself, the token included; the caller sees
+    " the 3xx instead and reports it
+    lo_client->propertytype_redirect = if_http_client=>co_disabled.
     lo_client->request->set_method( iv_method ).
     IF iv_uri IS NOT INITIAL.
       cl_http_utility=>set_request_uri( request = lo_client->request uri = iv_uri ).
