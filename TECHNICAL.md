@@ -10,7 +10,7 @@ This page contains detailed setup instructions, access requirements and examples
 
 The shared helper file `ZCHE_GRAPH_CORE` handles connections, data exchange and errors. The other files cover specific operations such as mail, files or calendars.
 
-Add the shared helper to SAP first, followed by the files for the required section. The table below summarizes the scope. The [walkthrough](WALKTHROUGH.tr.md) lists the files and setup order for each task.
+Add the shared helper to SAP first, followed by the files for the required section. The table below summarizes the scope. The [walkthrough](WALKTHROUGH.md) lists the files and setup order for each task.
 
 ```mermaid
 flowchart TB

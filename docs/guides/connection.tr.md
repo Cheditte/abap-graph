@@ -1,6 +1,6 @@
 # SAP ile Microsoft arasında ilk bağlantıyı kurmak
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](connection.md) | **Türkçe**
 
 Bu sayfa, Microsoft Graph kullanan bölümlerin ortak bağlantı hazırlığını açıklar. Aynı bağlantı posta, dosya ve takvim gibi işlemlerde tekrar kullanılabilir. **Yalnız Teams kanal bildirimi için [Teams rehberini](teams.tr.md) izleyin; bu işlem ayrı bir bağlantı kullanır.**
 

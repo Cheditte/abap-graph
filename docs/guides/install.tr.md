@@ -1,6 +1,6 @@
 # ABAP dosyalarının SAP’ye kurulumu
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](install.md) | **Türkçe**
 
 ABAP kaynakları [src klasöründe](../../src) yer alır. Aşağıdaki tablo, seçtiğiniz işlem için gereken dosyaları ve kurulum sırasını gösterir. İlk kurulumu geliştirme veya test sisteminde yapın.
 

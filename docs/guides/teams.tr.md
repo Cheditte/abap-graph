@@ -1,6 +1,6 @@
 # SAP’den Teams kanalına mesaj göndermek
 
-[Ana rehber](../../WALKTHROUGH.tr.md) · Toplantı bağlantısı için: [Takvim yolu](calendar.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · Toplantı bağlantısı için: [Takvim yolu](calendar.tr.md) · [English](teams.md) | **Türkçe**
 
 Teams bildirimi, SAP’deki bir işlemin bilgisini Teams kanalına kart olarak iletmek için kullanılır. Bu rehber, bağlantının hazırlanmasını ve ilk kartın gönderilmesini açıklar. Başarılı denemeden sonra aynı çağrı kendi ABAP raporunuza eklenebilir.
 
@@ -51,7 +51,7 @@ Adresi kesmeyin. Yol alanına tamamı sığmıyorsa bu haliyle devam etmeyin. Se
 | Title / Başlık | `SAP bağlantı denemesi` |
 | Text / Metin | `Bu mesaj SAP’den gönderildi.` |
 | Level / Düzey | `info`; sarı uyarı başlığı için `warning` |
-| Lines / Satırlar | İsteğe bağlı: `İşlem=Deneme | Sonuç=Tamamlandı` |
+| Lines / Satırlar | İsteğe bağlı: `İşlem=Deneme \| Sonuç=Tamamlandı` |
 | Add system, user and time | Test kartına sistem/kullanıcı/saat eklemek istiyorsanız işaretleyin |
 
 ![SAP Teams programının hedef adı, başlık, metin ve bilgi satırları.](../img/walkthrough/teams-input.png)

@@ -1,6 +1,6 @@
 # SAP ve Microsoft 365: kurulum ve kullanım rehberi
 
-[Proje](README.tr.md) · [Kaynak dosyalar](src)
+[Proje](README.tr.md) · [Kaynak dosyalar](src) · [English](WALKTHROUGH.md) | **Türkçe**
 
 **abap-graph**, SAP’den Microsoft 365 hizmetlerine erişmek için hazırlanmış ABAP dosyalarını ve örnek programları bir araya getirir. E-posta, dosya aktarımı, takvim ve Teams bildirimi gibi işlemler ayrı bölümler halinde kullanılabilir.
 
@@ -56,7 +56,7 @@ Dosya sırası ve türleri [SAP’ye dosya ekleme rehberinde](docs/guides/instal
 
 ## Ekran görüntülerini nasıl okumalı?
 
-Rehberde gerçek A4H/001 ve Microsoft 365 test ekranları kullanılmıştır. `Cheditte`, `SAP Test`, posta adresleri ve tarihler **örnek değerlerdir**; kendi ortamınızın bilgilerini kullanın. Program ekranları SAP oturum diline göre Türkçe veya İngilizce açılır. Gerektiğinde alan adları iki dilde belirtilmiştir.
+Rehberde gerçek A4H/001 ve Microsoft 365 test ekranları kullanılmıştır. `Cheditte`, `SAP Test`, posta adresleri ve tarihler **örnek değerlerdir**; kendi ortamınızın bilgilerini kullanın. Program ekranları SAP oturum diline göre Türkçe veya İngilizce açılır. Bazı Microsoft ekranları da Türkçedir; İngilizce rehberin görsel açıklamaları, özgün görüntüleri değiştirmeden ilgili alanları açıklar.
 
 Ekranlar önceki denemeleri ve 5 Kasım 2026’da 0.7.4 kurulu A4H/001 oturumunda alınan yeni görüntüleri birlikte içerir; bazı etiketler sürüme göre değişebilir. Alan doldurma örnekleri ile çalıştırılmış işlemlerin sonuçları görsel altında ayrı açıklanmıştır. ECC 6.0 üzerinde çalışma ve en az yetkili kurulum henüz doğrulanmış değildir. Güncel kapsam: [Neler doğrulandı?](VALIDATION.tr.md#neler-doğrulandı)
 

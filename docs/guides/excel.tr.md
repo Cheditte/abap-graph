@@ -1,6 +1,6 @@
 # Var olan bir Excel dosyasının hücreleriyle çalışmak
 
-[Ana rehber](../../WALKTHROUGH.tr.md) · Dosyanın tamamını aktarmak için: [Dosyalar](files.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · Dosyanın tamamını aktarmak için: [Dosyalar](files.tr.md) · [English](excel.md) | **Türkçe**
 
 Excel bölümü, SharePoint veya OneDrive’daki mevcut bir çalışma kitabının hücrelerini okumak ve değiştirmek için hazırlanmıştır. Aşağıdaki adımlar test ortamında yapılan uygulamayı açıklar. Kuruluma geçmeden önce destek sınırını inceleyin.
 

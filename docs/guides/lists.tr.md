@@ -1,6 +1,6 @@
 # SharePoint listesindeki kayıtları SAP’den okumak ve değiştirmek
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](lists.md) | **Türkçe**
 
 Listeler bölümü, SharePoint **Liste / List** kayıtlarını SAP’den okumak ve güncellemek için kullanılır. Önce örnek bir listeyi okuyun; ardından gerekirse test kaydı ekleyip sonucu SharePoint’te kontrol edin. Bu işlemler SharePoint listeleri içindir; Excel hücreleri ayrı bölümde ele alınır.
 

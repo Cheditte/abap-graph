@@ -1,6 +1,6 @@
 # SAP’den takvime etkinlik ve Teams toplantısı eklemek
 
-[Ana rehber](../../WALKTHROUGH.tr.md) · Kanal kartı için: [Teams bildirimi](teams.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · Kanal kartı için: [Teams bildirimi](teams.tr.md) · [English](calendar.md) | **Türkçe**
 
 Takvim bölümü, SAP’den Outlook etkinliği oluşturmak ve okumak için kullanılır. Teams toplantısı seçildiğinde etkinliğe **Katıl** bağlantısı eklenir. İlk kullanımda katılımcısız bir test toplantısı oluşturun ve sonucu Outlook’ta kontrol edin.
 
