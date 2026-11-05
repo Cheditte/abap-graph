@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1030" viewBox="0 0 1280 1030" role="img" aria-labelledby="title desc">
+<title id="title">SAP ve Microsoft 365: kullanım alanları</title><desc id="desc">İhtiyaç duyulan bölüm ayrı kurulabilir. Ortak yardımcı dosya bir kez eklenir. Teams kanal bildirimi İş Akışlarını, diğer yollar Microsoft Graph bağlantısını kullanır. Excel hücre işlemlerinin destek sınırı ilgili rehberde açıklanır.</desc>
+<rect x="0" y="0" width="1280" height="1030" rx="0" fill="#f4f7fa"/>
+<rect x="0" y="0" width="1280" height="1030" rx="0" fill="#ffffff"/>
+<rect x="44" y="42" width="5" height="28" rx="0" fill="#176e78"/>
+<text x="64" y="61" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#536779">abap-graph  /  KULLANIM REHBERİ</text>
+<text x="44" y="136" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700" fill="#152b3e">SAP ve Microsoft 365</text>
+<text x="44" y="175" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="400" fill="#536779">Yapmak istediğiniz işlemi seçin; ilgili kurulum adımlarını izleyin.</text>
+<polyline points="44,202 1236,202" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="44" y="229" width="282" height="664" rx="8" fill="#152b3e"/>
+<text x="68" y="283" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#ffffff">Kurulum kapsamı</text>
+<text x="68" y="331" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#dbe7ee">Yalnız ihtiyaç duyulan</text>
+<text x="68" y="363" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#dbe7ee">bölümün dosyaları</text>
+<text x="68" y="395" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#dbe7ee">SAP’ye eklenir.</text>
+<polyline points="68,432 302,432" fill="none" stroke="#4b6070" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="68" y="480" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#95d3d3">01</text>
+<text x="68" y="520" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">Ortak yardımcı dosya</text>
+<text x="68" y="553" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#dbe7ee">Bir kez kurulur.</text>
+<text x="68" y="619" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#95d3d3">02</text>
+<text x="68" y="659" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">İşleme özel dosyalar</text>
+<text x="68" y="692" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#dbe7ee">Seçilen bölüm eklenir.</text>
+<polyline points="68,730 302,730" fill="none" stroke="#4b6070" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="68" y="777" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#dbe7ee">Dosya sırası ve izinler</text>
+<text x="68" y="810" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#dbe7ee">her bölümde açıklanır.</text>
+<rect x="354" y="229" width="882" height="87" rx="5" fill="#f4f7f9"/>
+<rect x="373" y="252" width="36" height="27" rx="5" fill="#edf7f7" stroke="#176e78"/>
+<polyline points="382,279 382,287 392,279" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="381,261 400,261" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="381,269 396,269" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="264" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">Teams bildirimi</text>
+<text x="433" y="298" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">SAP bilgisini bir kanal kartı olarak gönderin.</text>
+<rect x="1092" y="243" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="260" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">İş Akışları</text>
+<rect x="354" y="324" width="882" height="87" rx="5" fill="#ffffff"/>
+<rect x="373" y="351" width="36" height="30" rx="4" fill="#edf7f7" stroke="#176e78"/>
+<polyline points="373,360 409,360" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="382,347 382,355" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="400,347 400,355" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="384,370 389,375 399,366" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="359" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">Takvim ve Teams toplantısı</text>
+<text x="433" y="393" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Etkinlik oluşturun; Teams katılma bağlantısı ekleyin.</text>
+<rect x="1092" y="338" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="355" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">Graph</text>
+<rect x="354" y="419" width="882" height="87" rx="5" fill="#f4f7f9"/>
+<rect x="373" y="446" width="36" height="26" rx="3" fill="#edf7f7" stroke="#176e78"/>
+<polyline points="373,447 391,460 409,447" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="454" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">E-posta</text>
+<text x="433" y="488" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">İleti gönderin veya gelen kutusunu okuyun.</text>
+<rect x="1092" y="433" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="450" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">Graph</text>
+<rect x="354" y="514" width="882" height="87" rx="5" fill="#ffffff"/>
+<polyline points="373,545 373,569 410,569 410,546 390,546 386,540 373,540 373,545" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="549" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">Dosyalar</text>
+<text x="433" y="583" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">SharePoint / OneDrive ile dosya aktarın.</text>
+<rect x="1092" y="528" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="545" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">Graph</text>
+<rect x="354" y="609" width="882" height="87" rx="5" fill="#f4f7f9"/>
+<rect x="373" y="634" width="36" height="31" rx="3" fill="#edf7f7" stroke="#176e78"/>
+<polyline points="385,635 385,664" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="397,635 397,664" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="373,644 409,644" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="373,654 409,654" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="644" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">Excel hücreleri</text>
+<text x="433" y="678" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Mevcut çalışma kitabındaki hücrelerle çalışın.</text>
+<rect x="1081" y="623" width="134" height="27" rx="4" fill="#faf1db"/>
+<text x="1093" y="640" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#795d20">Destek sınırı</text>
+<rect x="354" y="704" width="882" height="87" rx="5" fill="#ffffff"/>
+<rect x="373" y="733" width="5" height="5" rx="1" fill="#176e78"/>
+<polyline points="386,735 409,735" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="373" y="745" width="5" height="5" rx="1" fill="#176e78"/>
+<polyline points="386,747 409,747" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="373" y="757" width="5" height="5" rx="1" fill="#176e78"/>
+<polyline points="386,759 409,759" fill="none" stroke="#176e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="739" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">SharePoint listeleri</text>
+<text x="433" y="773" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Liste kayıtlarını okuyun veya güncelleyin.</text>
+<rect x="1092" y="718" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="735" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">Graph</text>
+<rect x="354" y="799" width="882" height="87" rx="5" fill="#f4f7f9"/>
+<rect x="383" y="822" width="16" height="16" rx="8" fill="#edf7f7" stroke="#176e78"/>
+<polyline points="374,857 374,850 380,844 402,844 408,850 408,857" fill="none" stroke="#176e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="433" y="834" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#152b3e">Kullanıcılar ve gruplar</text>
+<text x="433" y="868" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Hesapları ve grup üyelerini SAP’de görüntüleyin.</text>
+<rect x="1092" y="813" width="123" height="27" rx="4" fill="#e9f1f3"/>
+<text x="1104" y="830" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#176e78">Graph</text>
+<polyline points="44,924 1236,924" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="44" y="964" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Teams kanal bildirimi ve Teams toplantısı farklı kurulum yollarıdır.</text>
+<text x="44" y="999" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#536779">Excel dosyasını bütün olarak taşımak için Dosyalar bölümü yeterlidir.</text>
+</svg>

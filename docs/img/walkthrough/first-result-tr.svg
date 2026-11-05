@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" role="img" aria-labelledby="title desc">
+<title id="title">Kurulum ve ilk kullanım</title><desc id="desc">Üç aşama: Microsoft hizmetini ve izinleri hazırlayın; SAP dosyalarını ve bağlantıyı kurun; bir örnek işlemin sonucunu SAP ve Microsoft ekranlarında kontrol edin.</desc>
+<rect x="0" y="0" width="1280" height="480" rx="0" fill="#f4f7fa"/>
+<rect x="0" y="0" width="1280" height="480" rx="0" fill="#ffffff"/>
+<rect x="44" y="34" width="5" height="26" rx="0" fill="#176e78"/>
+<text x="64" y="53" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#536779">abap-graph  /  KURULUM SIRASI</text>
+<text x="44" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#152b3e">Kurulum ve ilk kullanım</text>
+<text x="44" y="157" font-family="Segoe UI, Arial, sans-serif" font-size="23" font-weight="400" fill="#536779">Her bölümde aynı sıra: hazırlık, kurulum ve sonuç kontrolü.</text>
+<polyline points="44,193 1236,193" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="44" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">01</text>
+<text x="44" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">Microsoft hazırlığı</text>
+<text x="44" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Hizmet ve erişim</text>
+<text x="44" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Posta kutusu, site, takvim veya</text>
+<text x="44" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">kanal için gereken erişimi hazırlayın.</text>
+<polyline points="432,226 432,417" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="454" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">02</text>
+<text x="454" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">SAP hazırlığı</text>
+<text x="454" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Dosyalar ve bağlantı</text>
+<text x="454" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Gerekli ABAP dosyalarını ekleyin;</text>
+<text x="454" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">SM59 bağlantısını tanımlayın.</text>
+<polyline points="842,226 842,417" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="864" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">03</text>
+<text x="864" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">Sonuç kontrolü</text>
+<text x="864" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Örnek işlem</text>
+<text x="864" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Bir örnek çalıştırın; sonucu SAP</text>
+<text x="864" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">ve Microsoft ekranlarında görün.</text>
+</svg>
