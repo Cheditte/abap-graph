@@ -1681,6 +1681,15 @@ CLASS lcl_graph_client DEFINITION FINAL.
       RAISING
         lcx_graph.
 
+    "! Seconds to wait before the IV_ATTEMPT-th retry: what Retry-After asks
+    "! for, otherwise 2, 4, 8 ...; never more than 60
+    CLASS-METHODS retry_wait
+      IMPORTING
+        iv_retry_after    TYPE string
+        iv_attempt        TYPE i
+      RETURNING
+        value(rv_seconds) TYPE i.
+
     "! The path part of an absolute Graph URL, for example of @odata.nextLink
     CLASS-METHODS path_of_url
       IMPORTING
@@ -1864,6 +1873,14 @@ CLASS lcl_graph_client IMPLEMENTATION.
   METHOD wait_seconds.
     DATA lv_value TYPE string.
     lv_value = header_value( it_headers = is_response-headers iv_name = `retry-after` ).
+    rv_seconds = retry_wait( iv_retry_after = lv_value iv_attempt = iv_attempt ).
+  ENDMETHOD.
+
+
+  METHOD retry_wait.
+    DATA lv_value TYPE string.
+    lv_value = iv_retry_after.
+    " Retry-After may also be a date (Wed, 21 Oct 2026 07:28:00 GMT): then the backoff
     IF lv_value IS NOT INITIAL AND lv_value CO '0123456789'.
       rv_seconds = lv_value.
     ELSE.
@@ -2329,6 +2346,9 @@ CLASS ltc_graph_json IMPLEMENTATION.
     DATA lv_kind TYPE char1.
 
     lo_json = lcl_graph_json=>parse( `{"a":{},"b":[],"c":[1,[2,3]]}` ).
+    " count( ) is 0 for a missing path too: the kind proves {} was read
+    lv_kind = lo_json->kind_of( `a` ).
+    cl_aunit_assert=>assert_equals( act = lv_kind exp = lcl_graph_json=>kind-object ).
     lv_count = lo_json->count( `a` ).
     cl_aunit_assert=>assert_equals( act = lv_count exp = 0 ).
     lv_kind = lo_json->kind_of( `b` ).
@@ -2515,6 +2535,8 @@ CLASS ltc_graph_client DEFINITION FINAL FOR TESTING.
     METHODS paging_stops_early FOR TESTING RAISING lcx_graph.
     METHODS paging_limit FOR TESTING.
     METHODS paths FOR TESTING.
+    METHODS retry_waits FOR TESTING.
+    METHODS encoded_paths FOR TESTING.
     METHODS roles_in_token FOR TESTING.
 
     METHODS request_at
@@ -2788,6 +2810,31 @@ CLASS ltc_graph_client IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
     ls_request = request_at( 3 ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users?$skiptoken=X1` ).
+  ENDMETHOD.
+
+
+  METHOD retry_waits.
+    DATA lv_seconds TYPE i.
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `5` iv_attempt = 1 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 5 ).
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `120` iv_attempt = 1 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 60 ).
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `` iv_attempt = 1 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 2 ).
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `` iv_attempt = 3 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 8 ).
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `Wed, 21 Oct 2026 07:28:00 GMT` iv_attempt = 2 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 4 ).
+    lv_seconds = lcl_graph_client=>retry_wait( iv_retry_after = `` iv_attempt = 9 ).
+    cl_aunit_assert=>assert_equals( act = lv_seconds exp = 60 ).
+  ENDMETHOD.
+
+
+  METHOD encoded_paths.
+    " Each part encoded, slashes kept, backslashes and outer slashes cleaned
+    DATA lv_path TYPE string.
+    lv_path = lcl_graph_conv=>encode_path( `/Raporlar\Q1 #2/50% bitti.pdf/` ).
+    cl_aunit_assert=>assert_equals( act = lv_path exp = `Raporlar/Q1%20%232/50%25%20bitti.pdf` ).
   ENDMETHOD.
 
 

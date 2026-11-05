@@ -978,12 +978,13 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
       EXPORTING
         is_config = ls_config
         io_http   = mo_http.
-    " UTC+3 all year, so the tests do not depend on summer time
+    " SAP's fixed zone UTC+3: no summer time and no change of rules, so the
+    " tests give the same on every system (TURKEY depends on its customizing)
     CREATE OBJECT mo_cut
       EXPORTING
         io_client    = lo_client
         iv_mailbox   = `sap@contoso.com`
-        iv_time_zone = 'TURKEY'.
+        iv_time_zone = 'UTC+3'.
     mo_http->token_answer( ).
   ENDMETHOD.
 
@@ -998,9 +999,9 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
     DATA lv_date TYPE d.
     DATA lv_time TYPE t.
 
-    lv_text = lcl_graph_calendar=>to_utc( iv_date = '20261110' iv_time = '013000' iv_time_zone = 'TURKEY' ).
+    lv_text = lcl_graph_calendar=>to_utc( iv_date = '20261110' iv_time = '013000' iv_time_zone = 'UTC+3' ).
     cl_aunit_assert=>assert_equals( act = lv_text exp = `2026-11-09T22:30:00` ).
-    lcl_graph_calendar=>from_utc( EXPORTING iv_text = `2026-11-09T22:30:00.0000000` iv_time_zone = 'TURKEY'
+    lcl_graph_calendar=>from_utc( EXPORTING iv_text = `2026-11-09T22:30:00.0000000` iv_time_zone = 'UTC+3'
                                   IMPORTING ev_date = lv_date ev_time = lv_time ).
     cl_aunit_assert=>assert_equals( act = lv_date exp = '20261110' ).
     cl_aunit_assert=>assert_equals( act = lv_time exp = '013000' ).

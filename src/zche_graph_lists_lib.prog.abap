@@ -909,6 +909,7 @@ CLASS ltc_graph_list DEFINITION FINAL FOR TESTING.
     METHODS upsert_other_error FOR TESTING.
     METHODS upsert_number_key FOR TESTING RAISING lcx_graph.
     METHODS clear_fields FOR TESTING RAISING lcx_graph.
+    METHODS one_item_and_delete FOR TESTING RAISING lcx_graph.
 
     METHODS answer_columns.
 
@@ -1183,6 +1184,23 @@ CLASS ltc_graph_list IMPLEMENTATION.
     ls_request = request_at( 3 ).
     lv_uri = cl_http_utility=>unescape_url( escaped = ls_request-uri ).
     cl_aunit_assert=>assert_char_cp( act = lv_uri exp = `*$filter=fields/Amount eq 5` ).
+  ENDMETHOD.
+
+
+  METHOD one_item_and_delete.
+    DATA ls_item TYPE lif_graph_lists=>ty_item.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    mo_http->answer( iv_status = 200 iv_body = `{"id":"7","fields":{"Title":"F-007"}}` ).
+    mo_http->answer( iv_status = 204 ).
+    ls_item = mo_cut->item( `7` ).
+    cl_aunit_assert=>assert_equals( act = ls_item-id exp = `7` ).
+    mo_cut->delete( `7` ).
+    ls_request = request_at( 2 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/sites/S1/lists/L1/items/7?$expand=fields` ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `DELETE` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/sites/S1/lists/L1/items/7` ).
   ENDMETHOD.
 
 
