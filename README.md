@@ -10,6 +10,51 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 
 > **Status: v0.7.4, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
+## A flower: one core, a petal for each product
+
+abap-graph is built like a flower. In the middle sits the **integrator**, the include `ZCHE_GRAPH_CORE`. It signs in to Microsoft, makes the HTTP calls, reads and writes JSON, waits and retries when Microsoft asks for it, follows the pages of long answers, and turns every error into a message that says what to check.
+
+Around it grow the **petals**, one for each Microsoft product. A petal is one include that knows its product and leaves everything else to the core. You never need the whole flower: install the core once, then only the petals you want. A petal you do not install costs nothing.
+
+```mermaid
+mindmap
+  root((ZCHE_GRAPH_CORE))
+    E-mail
+    SharePoint and OneDrive files
+      Excel
+    SharePoint lists
+    Entra ID users and groups
+    Outlook calendar and Teams meetings
+    Teams channel messages
+```
+
+| Petal | Include in your program | Program to try it | Microsoft permission | For example |
+|---|---|---|---|---|
+| [E-mail](#e-mail-module) | `ZCHE_GRAPH_MAIL_LIB` | `ZCHE_GRAPH_MAIL` | `Mail.Send`, `Mail.ReadWrite` | Send a spool list as PDF; read the invoices that arrive in a shared mailbox |
+| [Files](#sharepoint-and-onedrive-files) | `ZCHE_GRAPH_FILES_LIB` | `ZCHE_GRAPH_FILES` | `Sites.Selected` | Put a delivery note into a document library |
+| [Excel](#excel-workbooks) | `ZCHE_GRAPH_FILES_LIB`, then `ZCHE_GRAPH_EXCEL_LIB` | `ZCHE_GRAPH_EXCEL` | `Sites.Selected` | Write this month's figures into a planning workbook |
+| [Lists](#sharepoint-lists) | `ZCHE_GRAPH_LISTS_LIB` | `ZCHE_GRAPH_LISTS` | `Sites.Selected` | Keep a list of open orders up to date |
+| [Users and groups](#entra-id-users-and-groups) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | Find the SAP accounts of people who have left |
+| [Calendar and Teams meetings](#outlook-calendar) | `ZCHE_GRAPH_CALENDAR_LIB` | `ZCHE_GRAPH_CALENDAR` | `Calendars.ReadWrite` | Put a maintenance order into the team's calendar as a Teams meeting |
+| [Teams channel](#teams-channel-messages) | `ZCHE_GRAPH_TEAMS_LIB` | `ZCHE_GRAPH_TEAMS` | none: a Workflows webhook in SM59 | Tell a channel that a payment run stopped |
+
+`ZCHE_GRAPH_CHECK` belongs to the core: it tests the connection before any petal is used.
+
+To use a petal in your own program, include the core first and then the petals you need:
+
+```abap
+REPORT zmy_payment_run.
+INCLUDE zche_graph_core.        " the integrator: always, and first
+INCLUDE zche_graph_mail_lib.    " petal: e-mail
+INCLUDE zche_graph_teams_lib.   " petal: Teams channel
+```
+
+- **The core comes once and first**, however many petals follow.
+- **A petal needs only the core.** The one exception is Excel, which grows on the files petal: it finds the workbook through it, so `ZCHE_GRAPH_FILES_LIB` comes before `ZCHE_GRAPH_EXCEL_LIB`.
+- **The programs are for trying a petal out.** Your own code needs only the includes. (`ZCHE_GRAPH_FILES` also includes the e-mail petal, for turning a spool request into PDF.)
+- **Each petal brings its own permission**, and all of them sign in through the same two SM59 destinations of the core. The Teams petal does not sign in: it posts to a channel's webhook through an SM59 destination of its own.
+- **A new product is a new petal.** An include that calls `LCL_GRAPH_CLIENT` of the core (see [Use the core in your own program](#use-the-core-in-your-own-program)); the core itself does not change.
+
 ## How it works
 
 ```
@@ -658,8 +703,16 @@ ls_card-level = `error`.
 ls_card-facts = lcl_graph_teams=>facts_from_text( `Company code=1000 | Run=F110/0511` ).
 ls_card-link_url = `https://sap.contoso.com/fiori#PaymentRun-manage`.
 ls_card-link_title = `Open the payment run`.
-lo_teams->send( ls_card ).
+TRY.
+    lo_teams->send( ls_card ).
+  CATCH lcx_graph.
+    " The message did not get through; the payment run itself goes on
+ENDTRY.
 ```
+
+Catch the error: without it, a channel that cannot be reached stops your program as well.
+
+As the last step of a job, `ZCHE_GRAPH_TEAMS` reports only that the job got that far. When an earlier step fails, SAP stops the job and the last step never runs. To report an error, send the card from the program where the error happens, as above.
 
 ## Modules (plan)
 

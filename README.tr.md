@@ -18,6 +18,51 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 
 > **Durum: v0.7.4, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
+## Bir çiçek: ortada çekirdek, her ürüne bir yaprak
+
+abap-graph bir çiçek gibi kurulu. Ortasında **entegratör**, yani `ZCHE_GRAPH_CORE` include'u durur. Microsoft'a giriş yapar, HTTP çağrılarını yapar, JSON okur ve yazar, Microsoft istediğinde bekleyip yeniden dener, uzun cevapların sayfalarını takip eder ve her hatayı neyin kontrol edileceğini söyleyen bir mesaja çevirir.
+
+Çevresinde **yapraklar** büyür: her Microsoft ürünü için bir yaprak. Yaprak, kendi ürününü bilen ve geri kalan her şeyi çekirdeğe bırakan tek bir include'dur. Çiçeğin tamamına hiçbir zaman ihtiyacınız olmaz: çekirdeği bir kez kurarsınız, sonra yalnız istediğiniz yaprakları. Kurmadığınız yaprağın hiçbir yükü yoktur.
+
+```mermaid
+mindmap
+  root((ZCHE_GRAPH_CORE))
+    E-posta
+    SharePoint ve OneDrive dosyaları
+      Excel
+    SharePoint listeleri
+    Entra ID kullanıcıları ve grupları
+    Outlook takvimi ve Teams toplantıları
+    Teams kanal mesajları
+```
+
+| Yaprak | Programınıza eklenecek include | Denemek için program | Microsoft izni | Örnek |
+|---|---|---|---|---|
+| [E-posta](#e-posta-modülü) | `ZCHE_GRAPH_MAIL_LIB` | `ZCHE_GRAPH_MAIL` | `Mail.Send`, `Mail.ReadWrite` | Bir spool listesini PDF olarak göndermek; ortak kutuya gelen faturaları okumak |
+| [Dosyalar](#sharepoint-ve-onedrive-dosyaları) | `ZCHE_GRAPH_FILES_LIB` | `ZCHE_GRAPH_FILES` | `Sites.Selected` | İrsaliyeyi bir doküman kitaplığına koymak |
+| [Excel](#excel-çalışma-kitapları) | önce `ZCHE_GRAPH_FILES_LIB`, sonra `ZCHE_GRAPH_EXCEL_LIB` | `ZCHE_GRAPH_EXCEL` | `Sites.Selected` | Bu ayın rakamlarını bir planlama kitabına yazmak |
+| [Listeler](#sharepoint-listeleri) | `ZCHE_GRAPH_LISTS_LIB` | `ZCHE_GRAPH_LISTS` | `Sites.Selected` | Açık siparişler listesini güncel tutmak |
+| [Kullanıcılar ve gruplar](#entra-id-kullanıcıları-ve-grupları) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | Ayrılan çalışanların SAP hesaplarını bulmak |
+| [Takvim ve Teams toplantıları](#outlook-takvimi) | `ZCHE_GRAPH_CALENDAR_LIB` | `ZCHE_GRAPH_CALENDAR` | `Calendars.ReadWrite` | Bakım siparişini ekibin takvimine Teams toplantısı olarak koymak |
+| [Teams kanalı](#teams-kanal-mesajları) | `ZCHE_GRAPH_TEAMS_LIB` | `ZCHE_GRAPH_TEAMS` | yok: SM59'da bir Workflows web kancası | Ödeme çalıştırmasının durduğunu kanala bildirmek |
+
+`ZCHE_GRAPH_CHECK` çekirdeğe aittir: herhangi bir yaprak kullanılmadan önce bağlantıyı test eder.
+
+Bir yaprağı kendi programınızda kullanmak için önce çekirdeği, sonra ihtiyacınız olan yaprakları ekleyin:
+
+```abap
+REPORT zmy_payment_run.
+INCLUDE zche_graph_core.        " entegratör: her zaman ve ilk sırada
+INCLUDE zche_graph_mail_lib.    " yaprak: e-posta
+INCLUDE zche_graph_teams_lib.   " yaprak: Teams kanalı
+```
+
+- **Çekirdek bir kez ve ilk sırada eklenir**, ardından kaç yaprak gelirse gelsin.
+- **Bir yaprak yalnız çekirdeğe ihtiyaç duyar.** Tek istisna Excel: dosyalar yaprağının üzerinde büyür ve çalışma kitabını onun üzerinden bulur. Bu yüzden `ZCHE_GRAPH_FILES_LIB`, `ZCHE_GRAPH_EXCEL_LIB`'den önce gelir.
+- **Programlar yaprağı denemek içindir.** Kendi kodunuz için yalnız include'lar yeterli. (`ZCHE_GRAPH_FILES`, spool'u PDF'e çevirmek için e-posta yaprağını da ekler.)
+- **Her yaprak kendi iznini getirir**, hepsi çekirdeğin aynı iki SM59 hedefiyle giriş yapar. Teams yaprağı giriş yapmaz: kendi SM59 hedefiyle bir kanalın web kancasına gönderir.
+- **Yeni bir ürün, yeni bir yapraktır.** Çekirdeğin `LCL_GRAPH_CLIENT` sınıfını çağıran bir include yeterli (bkz. [Çekirdeği kendi programınızda kullanmak](#çekirdeği-kendi-programınızda-kullanmak)); çekirdeğin kendisi değişmez.
+
 ## Nasıl çalışır
 
 ```
@@ -696,8 +741,16 @@ ls_card-level = `error`.
 ls_card-facts = lcl_graph_teams=>facts_from_text( `Şirket kodu=1000 | Çalıştırma=F110/0511` ).
 ls_card-link_url = `https://sap.contoso.com/fiori#PaymentRun-manage`.
 ls_card-link_title = `Ödeme çalıştırmasını aç`.
-lo_teams->send( ls_card ).
+TRY.
+    lo_teams->send( ls_card ).
+  CATCH lcx_graph.
+    " Mesaj gidemedi; ödeme çalıştırmasının kendisi devam eder
+ENDTRY.
 ```
+
+Hatayı yakalayın: yakalamazsanız, ulaşılamayan bir kanal programınızı da durdurur.
+
+Bir job'un son adımı olarak `ZCHE_GRAPH_TEAMS` yalnız job'un o adıma kadar geldiğini bildirir. Önceki bir adım hata verirse SAP job'u durdurur ve son adım hiç çalışmaz. Hatayı bildirmek için kartı, yukarıdaki gibi hatanın oluştuğu programdan gönderin.
 
 ## Modüller (plan)
 
