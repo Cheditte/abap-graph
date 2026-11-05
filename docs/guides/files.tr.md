@@ -1,6 +1,6 @@
 # SAP ile SharePoint veya OneDrive arasında dosya alışverişi
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](files.md) | **Türkçe**
 
 Dosyalar bölümü, SharePoint veya OneDrive klasörlerini listelemek ve SAP ile dosya aktarımı yapmak için kullanılır. İlk kullanımda bir klasörü listeleyin, ardından örnek bir dosyayı aktarın. Excel dosyasını **bütün olarak** yüklemek veya indirmek için de bu bölüm yeterlidir.
 

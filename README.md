@@ -8,19 +8,19 @@ I developed this project to reduce repeated connection and operation code when w
 
 **Install only the part you need.** Sending a Teams channel notification does not require the mail or Excel sections. Use the supplied screens to try an operation, then work with an ABAP developer to connect it to your business process.
 
-**[Setup and first-use roadmap →](WALKTHROUGH.md)**
+**[Illustrated setup and first-use roadmap →](WALKTHROUGH.md)**
 
 ## What would you like to do?
 
 | Your task | Where to start |
 | --- | --- |
-| Send a notification to a Teams channel | [Teams notifications](WALKTHROUGH.md#teams-channel-notifications) |
-| Create a Teams meeting link or read a calendar | [Calendar and meetings](WALKTHROUGH.md#calendar-and-teams-meetings) |
-| Send mail from a mailbox or read incoming messages | [E-mail](WALKTHROUGH.md#e-mail) |
-| Upload or download SharePoint / OneDrive files | [Files](WALKTHROUGH.md#files) |
-| Read or change cells in an existing Excel workbook | [Excel — read the support limitation](WALKTHROUGH.md#excel-cells) |
-| Work with records in a SharePoint list | [Lists](WALKTHROUGH.md#sharepoint-lists) |
-| List Microsoft users and group members | [Users and groups](WALKTHROUGH.md#users-and-groups) |
+| Send a notification to a Teams channel | [Teams notifications](docs/guides/teams.md) |
+| Create a Teams meeting link or read a calendar | [Calendar and meetings](docs/guides/calendar.md) |
+| Send mail from a mailbox or read incoming messages | [E-mail](docs/guides/mail.md) |
+| Upload or download SharePoint / OneDrive files | [Files](docs/guides/files.md) |
+| Read or change cells in an existing Excel workbook | [Excel — read the support limitation](docs/guides/excel.md) |
+| Work with records in a SharePoint list | [Lists](docs/guides/lists.md) |
+| List Microsoft users and group members | [Users and groups](docs/guides/users.md) |
 
 ## Three things to prepare
 
@@ -43,7 +43,7 @@ Microsoft Graph is the interface that lets programs access Microsoft 365 service
 
 ## Explore further
 
-- **Setup and first use:** [roadmap](WALKTHROUGH.md) · [illustrated Turkish guides](WALKTHROUGH.tr.md)
+- **Setup and first use:** [illustrated roadmap](WALKTHROUGH.md)
 - **Fields, permissions and use in your own ABAP code:** [technical reference](TECHNICAL.md)
 - **Source files:** [src folder](src)
 

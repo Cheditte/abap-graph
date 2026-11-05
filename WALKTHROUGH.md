@@ -1,79 +1,63 @@
-# SAP and Microsoft 365: setup roadmap
+# SAP and Microsoft 365: setup and usage guide
 
-[Project overview](README.md) · **English** | [Türkçe — illustrated guides](WALKTHROUGH.tr.md)
+[Project](README.md) · [Source files](src) · **English** | [Türkçe](WALKTHROUGH.tr.md)
 
-Start with the operation you need. Each section below links to its detailed setup and a guide with real SAP and Microsoft screenshots. The illustrated module guides are currently in Turkish; the technical instructions and ABAP examples are available in English.
+**abap-graph** brings together ABAP files and example programs for accessing Microsoft 365 from SAP. Mail, file transfers, calendars and Teams notifications can be used as separate sections.
 
-## 1. Choose your route
+This guide starts with the task you want to complete, then explains the preparation and first-use steps. The source files are in the [src folder](src); screenshots show the test environment. **Install only the section you need.** For example, sending a Teams channel message does not require the Mail or Excel sections.
 
-### Teams channel notifications
+## Overview
 
-Send a card to a Teams channel. Create a Teams Workflow for that channel, store its connection in SAP, and send a sample card. This route uses its own connection; it does not need the Graph application registration, the two Graph destinations or the connection-check program below.
+**Microsoft Graph** is the interface that lets programs access Microsoft 365 services such as mail, files and calendars with the appropriate permissions. **abap-graph** provides the ABAP files for using that connection from SAP. You do not install Microsoft Graph on your computer. [Microsoft's explanation](https://learn.microsoft.com/en-us/graph/overview)
 
-[English instructions](TECHNICAL.md#teams-channel-messages) · [Screenshots](docs/guides/teams.tr.md)
+A shared helper file handles connections and data exchange. Add it to SAP once, then add the files for your chosen task. Teams **channel notifications** use a Workflow connection created in Teams.
 
-### Calendar and Teams meetings
+![Seven tasks: Teams notification, Teams meeting and calendar, mail, files, Excel cells, SharePoint lists, users. Choose only the route you need.](docs/img/walkthrough/choose-your-route-en.svg)
 
-Read a calendar or create an event with a Teams join link. Prepare access to the chosen mailbox; Teams meetings also need a suitable licensed account. Start with a test event without attendees and check its time in Outlook.
+## 1. What would you like to do?
 
-[English instructions](TECHNICAL.md#outlook-calendar) · [Screenshots](docs/guides/calendar.tr.md)
+Each section covers its own preparation, required files and first trial. Choose your route from the table below.
 
-### E-mail
+| Your task | Guide |
+| --- | --- |
+| Send a notification card from SAP to a Teams channel | [Teams notification →](docs/guides/teams.md) |
+| Create a meeting with a Teams join link; read a calendar | [Calendar and Teams meeting →](docs/guides/calendar.md) |
+| Send e-mail from a mailbox or read incoming messages | [E-mail →](docs/guides/mail.md) |
+| Upload or download SharePoint / OneDrive files | [Files →](docs/guides/files.md) |
+| Read or change cells in an existing Excel workbook | [Excel →](docs/guides/excel.md) — read the support note first |
+| Read or update records in a SharePoint list | [Lists →](docs/guides/lists.md) |
+| View Microsoft users and group members in SAP | [Users and groups →](docs/guides/users.md) |
 
-Read incoming messages or send a message from a mailbox. Prepare access to that mailbox, read a small set of messages, then send a test message and check its delivery in Outlook.
+**Two important distinctions:** Teams notifications and Teams meetings follow different routes. **Files** is sufficient for transferring a whole `.xlsx` file; choose **Excel** to work with its cells.
 
-[English instructions](TECHNICAL.md#e-mail-module) · [Screenshots](docs/guides/mail.tr.md)
+## 2. The three parts of setup
 
-### Files
+![1 Prepare the Microsoft service and access. 2 Install only the required SAP files and connection. 3 Run a sample and check the result in Microsoft too.](docs/img/walkthrough/first-result-en.svg)
 
-Upload, download or list files in SharePoint or OneDrive. Prepare access to a test location, list a folder first, then transfer a sample file. This route also handles complete `.xlsx` files.
+| Stage | What to do | Authorization needed |
+| --- | --- | --- |
+| **Microsoft preparation** | Prepare the mailbox, site, calendar or channel and its access permissions | Relevant Microsoft 365 administration permissions |
+| **SAP preparation** | Create the selected files in SE38 and configure connections in SM59 | SAP development and connection-configuration authorizations |
+| **Result check** | Run a sample; check the result in SAP and Microsoft | Program execution and access to the relevant service |
 
-[English instructions](TECHNICAL.md#sharepoint-and-onedrive-files) · [Screenshots](docs/guides/files.tr.md)
+One person can handle all of these tasks. You do not need to be a developer to understand the guide; if you lack installation permissions, share your chosen route with the relevant administrator. **Trying the supplied screens requires no coding.** Connecting them automatically to a business process requires ABAP development.
 
-### Excel cells
+## 3. Shared file and section dependencies
 
-Read or change cells in an existing workbook. **Read the support limitation first:** the project signs in as an application, which Microsoft does not list as supported for these Workbook API operations. The tests used broad site permissions; they do not establish support with a restricted configuration. Use Files if you only need to transfer a whole workbook.
+What you install depends on your chosen task. The file relationships are:
 
-[Support limitation and English instructions](TECHNICAL.md#excel-workbooks) · [Screenshots](docs/guides/excel.tr.md)
+- **Every route:** install the shared helper `ZCHE_GRAPH_CORE` once.
+- **Graph routes:** reuse the same Microsoft application registration and two SAP connections. Grant any additional access required by a new function separately.
+- **Teams notifications only:** no Graph application registration, two Graph destinations or `ZCHE_GRAPH_CHECK`; this route uses its own channel connection.
+- **Excel:** also needs the Files **library**. The Files and Mail screens are not required.
+- **Supplied Files screen:** also needs the Mail **library** for PDF conversion. This does not require mail permission or the Mail screen.
 
-### SharePoint lists
+File order and program types are listed in the [SAP file installation guide](docs/guides/install.md). Your chosen route links there when needed.
 
-Read or update records in a SharePoint list. Prepare access to a test site and list, read its existing records, then try one new test record and check it in SharePoint.
+## How to read the screenshots
 
-[English instructions](TECHNICAL.md#sharepoint-lists) · [Screenshots](docs/guides/lists.tr.md)
+The guide uses real A4H/001 and Microsoft 365 test screens. `Cheditte`, `SAP Test`, mailbox addresses and dates are **examples**; use your own environment's values. Program screens open in Turkish or English according to the SAP session language. Some Microsoft screens are also in Turkish; the English captions explain the relevant fields without altering the original evidence.
 
-### Users and groups
+The images combine earlier trials with new captures from 5 November 2026 in A4H/001 with 0.7.4 installed; some labels vary by version. Captions distinguish field-entry examples from executed results. ECC 6.0 runtime compatibility and a least-privilege configuration have not yet been verified. Current scope: [What has been verified?](VALIDATION.md#what-has-been-verified)
 
-List Microsoft users and group members. Start with a search limited to five users, then compare the names with your Microsoft environment. These operations read account information without changing accounts or membership.
-
-[English instructions](TECHNICAL.md#entra-id-users-and-groups) · [Screenshots](docs/guides/users.tr.md)
-
-## 2. Prepare the connection your route needs
-
-For mail, calendars, files, lists, users and Excel:
-
-1. **Microsoft preparation:** register an application and grant only the access required for your task. A tenant is your organization's Microsoft environment; the application registration identifies SAP to it.
-2. **SAP preparation:** configure the sign-in and API connections in SM59, SAP's connection settings. Your SAP application server must be able to reach Microsoft over HTTPS.
-3. **First connection:** run the supplied check program to check the destinations and application sign-in. The final default `/organization` call has its own permission requirement; a successful sign-in and a denied final call are different results.
-
-[Detailed connection setup](TECHNICAL.md#set-up) · [Connection screenshots](docs/guides/connection.tr.md)
-
-**Only sending Teams channel notifications?** Follow the [Teams route](#teams-channel-notifications) instead. Do not create the two Graph connections just for that task.
-
-## 3. Install the selected files and try one operation
-
-Add `ZCHE_GRAPH_CORE`, the shared helper file, once. Then add only the files required by your chosen route. The section's **Install** instructions give their names and types for SE38, the SAP program editor.
-
-- Excel also needs the Files **library**, but not the Files screen or Mail library.
-- The supplied Files screen also uses the Mail **library** for PDF conversion. It does not need mail permissions.
-- You need SAP development authorization to install the files. If another person handles installation, give them the instructions for your selected route.
-
-[File structure and dependencies](TECHNICAL.md#file-structure-and-use-cases) · [SE38 screenshots](docs/guides/install.tr.md)
-
-Use a development or test system for the first run. Check the result in SAP and, where relevant, in Outlook, Teams or SharePoint. The supplied screens let you try operations; connecting them to an existing business process requires ABAP development.
-
-## Read the evidence in context
-
-The screenshots come from A4H/001 and a Microsoft 365 test environment. Names, addresses, IDs and dates are examples: use your own values. Captions distinguish field examples from executed results and identify older test versions. Neither ECC 6.0 runtime compatibility nor a least-privilege setup has been fully verified.
-
-[Validation records](VALIDATION.md) · [Technical reference](TECHNICAL.md) · [Back to project overview](README.md)
+Start by [choosing your route](#1-what-would-you-like-to-do), then try it in a development or test system.

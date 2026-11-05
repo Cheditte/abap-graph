@@ -1,6 +1,6 @@
 # SAP’den e-posta göndermek ve gelen kutusunu okumak
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](mail.md) | **Türkçe**
 
 E-posta bölümü, Microsoft 365 posta kutusundan ileti göndermek ve gelen iletileri okumak için kullanılır. İlk kullanımda gelen kutusunu listeleyin, ardından kontrol ettiğiniz bir adrese test iletisi gönderin. Aynı program SAP spool çıktısını PDF eki olarak göndermeyi de destekler.
 

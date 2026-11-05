@@ -1,6 +1,6 @@
 # Microsoft kullanıcılarını ve grup üyelerini SAP’de listelemek
 
-[Ana rehber](../../WALKTHROUGH.tr.md)
+[Ana rehber](../../WALKTHROUGH.tr.md) · [English](users.md) | **Türkçe**
 
 Bu bölüm, Microsoft 365 kullanıcılarını ve grup üyelerini SAP’de listelemeyi açıklar. İlk kullanımda sınırlı sayıda hesabı okuyun ve Microsoft tarafındaki bilgilerle karşılaştırın. Program yalnız okuma yapar; hesap oluşturmaz, silmez veya kapatmaz.
 
