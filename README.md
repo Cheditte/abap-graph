@@ -17,15 +17,15 @@ abap-graph is built like a flower. In the middle sits the **integrator**, the in
 Around it grow the **petals**, one for each Microsoft product. A petal is one include that knows its product and leaves everything else to the core. You never need the whole flower: install the core once, then only the petals you want. A petal you do not install costs nothing.
 
 ```mermaid
-mindmap
-  root((ZCHE_GRAPH_CORE))
-    E-mail
-    SharePoint and OneDrive files
-      Excel
-    SharePoint lists
-    Entra ID users and groups
-    Outlook calendar and Teams meetings
-    Teams channel messages
+flowchart TB
+  mail["E-mail"] --- core
+  lists["SharePoint lists"] --- core
+  users["Entra ID users and groups"] --- core
+  core(("ZCHE_GRAPH_CORE<br/>the integrator"))
+  core --- files["SharePoint and OneDrive files"]
+  core --- calendar["Outlook calendar and Teams meetings"]
+  core --- teams["Teams channel messages"]
+  files --- excel["Excel"]
 ```
 
 | Petal | Include in your program | Program to try it | Microsoft permission | For example |

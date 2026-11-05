@@ -25,15 +25,15 @@ abap-graph bir çiçek gibi kurulu. Ortasında **entegratör**, yani `ZCHE_GRAPH
 Çevresinde **yapraklar** büyür: her Microsoft ürünü için bir yaprak. Yaprak, kendi ürününü bilen ve geri kalan her şeyi çekirdeğe bırakan tek bir include'dur. Çiçeğin tamamına hiçbir zaman ihtiyacınız olmaz: çekirdeği bir kez kurarsınız, sonra yalnız istediğiniz yaprakları. Kurmadığınız yaprağın hiçbir yükü yoktur.
 
 ```mermaid
-mindmap
-  root((ZCHE_GRAPH_CORE))
-    E-posta
-    SharePoint ve OneDrive dosyaları
-      Excel
-    SharePoint listeleri
-    Entra ID kullanıcıları ve grupları
-    Outlook takvimi ve Teams toplantıları
-    Teams kanal mesajları
+flowchart TB
+  mail["E-posta"] --- core
+  lists["SharePoint listeleri"] --- core
+  users["Entra ID kullanıcıları ve grupları"] --- core
+  core(("ZCHE_GRAPH_CORE<br/>entegratör"))
+  core --- files["SharePoint ve OneDrive dosyaları"]
+  core --- calendar["Outlook takvimi ve Teams toplantıları"]
+  core --- teams["Teams kanal mesajları"]
+  files --- excel["Excel"]
 ```
 
 | Yaprak | Programınıza eklenecek include | Denemek için program | Microsoft izni | Örnek |
