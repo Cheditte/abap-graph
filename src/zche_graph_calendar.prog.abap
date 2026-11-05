@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR: Outlook calendar through Microsoft Graph
-*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_CALENDAR_LIB
@@ -41,7 +41,7 @@ PARAMETERS r_delete RADIOBUTTON GROUP do.
 SELECTION-SCREEN END OF BLOCK b_do.
 
 SELECTION-SCREEN BEGIN OF BLOCK b_when WITH FRAME TITLE t_when.
-PARAMETERS p_from TYPE d DEFAULT sy-datum.
+PARAMETERS p_from TYPE d DEFAULT sy-datlo.
 PARAMETERS p_to TYPE d.
 PARAMETERS p_tstart TYPE t DEFAULT '090000'.
 PARAMETERS p_tend TYPE t DEFAULT '100000'.

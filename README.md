@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.7.2, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.3, not released.** The core, the connection test and the e-mail, files, lists, Excel, users, calendar and Teams modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -742,6 +742,10 @@ And in 0.7.2:
 - The calendar's list of a day no longer shows all-day events of the day before; an all-day event made in Outlook in another time zone gets its right date. Finding a free time without anyone, or with the end before the start, is an error.
 - Lists: `OwnerLookupId` writes a list of IDs when the column allows several; a column whose own name ends in LookupId keeps its type; empty clears a yes/no or date field; a number key column is compared as a number in `upsert`.
 - Guest addresses with `#` work for mail and calendar; folder paths come back decoded; the SAP account check stops with an error above 100,000 users; a Teams error never repeats an answer that holds the webhook key.
+
+Found on the tenant and fixed in 0.7.3:
+
+- The "Time" line that `ZCHE_GRAPH_TEAMS` adds showed the server's clock next to the user's time zone (on the test system UTC, labelled CET, an hour off). It now shows the user's own date and time. For the same reason the date that `ZCHE_GRAPH_CALENDAR` proposes is now the user's today, not the server's.
 
 ### Unit tests and made-up credentials, 2 November 2026
 

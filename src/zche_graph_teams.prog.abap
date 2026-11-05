@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_TEAMS: a message to a Microsoft Teams channel
-*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_TEAMS_LIB first,
@@ -171,8 +171,10 @@ CLASS lcl_app IMPLEMENTATION.
       ls_fact-value = sy-uname.
       APPEND ls_fact TO ls_card-facts.
       ls_fact-name = lcl_text=>get( iv_en = `Time` iv_tr = `Zaman` ).
-      CONCATENATE sy-datum(4) `-` sy-datum+4(2) `-` sy-datum+6(2) INTO lv_date.
-      CONCATENATE sy-uzeit(2) `:` sy-uzeit+2(2) `:` sy-uzeit+4(2) INTO lv_time.
+      " The user's own date and time, which belong to SY-ZONLO; SY-DATUM and
+      " SY-UZEIT are the server's and may be in another zone
+      CONCATENATE sy-datlo(4) `-` sy-datlo+4(2) `-` sy-datlo+6(2) INTO lv_date.
+      CONCATENATE sy-timlo(2) `:` sy-timlo+2(2) `:` sy-timlo+4(2) INTO lv_time.
       CONCATENATE lv_date lv_time sy-zonlo INTO ls_fact-value SEPARATED BY space.
       APPEND ls_fact TO ls_card-facts.
     ENDIF.
