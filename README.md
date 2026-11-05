@@ -8,7 +8,7 @@ Connect SAP with Microsoft 365 from ABAP alone, through **Microsoft Graph**: no 
 - **ABAP 7.00 syntax:** written for ECC 6.0 and later, S/4HANA included. So far it has run on SAP_BASIS 816 only; see [What has been verified](#what-has-been-verified).
 - **The secret stays in SM59:** the code never sees it.
 
-> **Status: v0.7.1, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
+> **Status: v0.7.2, not released.** The core, the connection test and the e-mail, files, lists, Excel, users and calendar modules were tried on an SAP ABAP Cloud Developer Trial against a real Microsoft 365 test tenant; the Teams module not yet with a real channel. They were not tried with least-privilege permissions or on a real 7.00 system (see [What has been verified](#what-has-been-verified)).
 
 ## How it works
 
@@ -128,7 +128,7 @@ ENDTRY.
 
 ### Microsoft calls and SAP transactions
 
-A call to Microsoft is not part of the SAP transaction: a sent mail or a created item stays when your program later fails or rolls back. And while it retries after HTTP 429, the core waits with `WAIT UP TO`, which commits the open database changes of your program. So:
+A call to Microsoft is not part of the SAP transaction: a sent mail or a created item stays when your program later fails or rolls back. And while it retries after HTTP 429, the core waits with `WAIT UP TO`, which commits the open database changes of your program (`no_wait = abap_true` in the configuration gives the error at once instead, for example in an update task, where waiting is not allowed). So:
 - call the modules **after** `COMMIT WORK`, not between your database changes and the commit;
 - when a call must not get lost, write what is to be sent into a table of your own in the same transaction, and let a job send it and mark it as sent (an *outbox*).
 
@@ -556,7 +556,7 @@ Put SAP dates into Outlook calendars. Typical uses:
 The module consists of the include `ZCHE_GRAPH_CALENDAR_LIB` (class `LCL_GRAPH_CALENDAR`) and the program `ZCHE_GRAPH_CALENDAR`.
 
 - **Create an event** in the calendar of a user or a shared mailbox: subject, text, time or whole days, location, required and optional attendees (they get an invitation), reminder, "show as", categories.
-- **Your own key** (`transaction_id`), for example the order number: Microsoft creates an event only once per key, so running the same job twice does not make two events.
+- **Your own key** (`transaction_id`), for example the order number: Microsoft creates an event only once per key, so running the same job twice does not make two events. The same key for an event with other details is refused (`ErrorDuplicateTransactionId`); this was seen on the test tenant.
 - **List** the events of a period, with the occurrences of series one by one.
 - **Change** an event (attendees get the update), **cancel** it (attendees get the cancellation, with a comment) or **delete** it from this calendar only.
 - **Teams meeting:** with `teams_meeting = X` Microsoft opens a Teams meeting and puts the join link into the invitation and into `join_url`. The organizer is the mailbox, so it needs a Teams licence; a shared mailbox has none.
@@ -728,6 +728,16 @@ Found by a code review and fixed in 0.7.1:
 - A person column that allows several people was taken for a single one.
 - A negative number was written as `5-` in JSON.
 - Adding a worksheet used the wrong address (`worksheets/add`); not tried on the tenant.
+
+And in 0.7.2:
+
+- The pieces of a large upload are sent again after HTTP 429, 503 or 504, like other PUT requests. A failed upload closes its upload session; a failed large mail deletes its half-built draft and says so.
+- An upload whose last piece still leaves bytes missing is an error, not "OK Uploaded" with an empty file, and not a mail without its attachment.
+- Whether a mail fits into one request counts the body too, not only the attachments. HTTP 413 has a hint.
+- Hints say "the call was retried" only when it was; a redirect (3xx) is an error and is not followed.
+- The calendar's list of a day no longer shows all-day events of the day before; an all-day event made in Outlook in another time zone gets its right date. Finding a free time without anyone, or with the end before the start, is an error.
+- Lists: `OwnerLookupId` writes a list of IDs when the column allows several; a column whose own name ends in LookupId keeps its type; empty clears a yes/no or date field; a number key column is compared as a number in `upsert`.
+- Guest addresses with `#` work for mail and calendar; folder paths come back decoded; the SAP account check stops with an error above 100,000 users; a Teams error never repeats an answer that holds the webhook key.
 
 ### Unit tests and made-up credentials, 2 November 2026
 

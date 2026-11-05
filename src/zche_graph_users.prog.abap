@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_USERS: users and groups of Microsoft Entra ID through
 *& Microsoft Graph
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE and ZCHE_GRAPH_USERS_LIB first,
@@ -323,6 +323,13 @@ CLASS lcl_app IMPLEMENTATION.
     ENDLOOP.
     " All users of the company, read once
     lt_entra = io_users->find( ).
+    " find( ) stops at 100,000 users; beyond them everyone would look missing
+    lv_count = lines( lt_entra ).
+    IF lv_count >= 100000.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `Microsoft Entra ID has 100,000 users or more; the check would not be complete.`.
+    ENDIF.
     lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra ).
 
     lv_count = lines( lt_entra ).

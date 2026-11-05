@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_LISTS_LIB: SharePoint lists through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_LISTS_LIB with type "Include
@@ -521,18 +521,43 @@ CLASS lcl_graph_list IMPLEMENTATION.
     DATA lv_upper TYPE string.
     DATA lv_annotation TYPE string.
     DATA lv_true TYPE abap_bool.
+    DATA lv_found TYPE abap_bool.
+    DATA lv_lookup TYPE abap_bool.
+    DATA lv_multiple TYPE abap_bool.
+    DATA lv_base TYPE string.
+    DATA lv_length TYPE i.
+    DATA ls_base TYPE lif_graph_lists=>ty_column.
 
     columns( ).
     LOOP AT it_fields INTO ls_field.
-      CLEAR ls_column.
+      CLEAR: ls_column, lv_lookup, lv_multiple.
       READ TABLE mt_columns INTO ls_column WITH KEY name = ls_field-name.
+      IF sy-subrc = 0.
+        lv_found = abap_true.
+      ELSE.
+        lv_found = abap_false.
+      ENDIF.
       lv_upper = ls_field-name.
       TRANSLATE lv_upper TO UPPER CASE.
+      lv_value = lcl_graph_conv=>trim( ls_field-value ).
 
-      IF lv_upper CP '*LOOKUPID'.
-        " Lookup and person columns are written as numbers: OwnerLookupId = 12, or 12;15
+      " OwnerLookupId is no column of its own but the ID side of the column
+      " Owner; a real column whose name ends in LookupId keeps its own type
+      IF lv_found = abap_false AND lv_upper CP '*LOOKUPID'.
+        lv_lookup = abap_true.
+        lv_length = strlen( ls_field-name ) - 8.
+        lv_base = ls_field-name(lv_length).
+        READ TABLE mt_columns INTO ls_base WITH KEY name = lv_base.
+        IF sy-subrc = 0.
+          lv_multiple = ls_base-multiple.
+        ENDIF.
+      ENDIF.
+
+      IF lv_lookup = abap_true.
+        " Lookup and person columns are written as numbers: OwnerLookupId = 12, or 12;15.
+        " A column that allows several gets a list even for one value.
         SPLIT ls_field-value AT ';' INTO TABLE lt_values.
-        IF lines( lt_values ) > 1.
+        IF lines( lt_values ) > 1 OR lv_multiple = abap_true.
           CONCATENATE ls_field-name `@odata.type` INTO lv_annotation.
           io_writer->add_string( iv_name = lv_annotation iv_value = `Collection(Edm.Int32)` ).
           io_writer->begin_array( ls_field-name ).
@@ -549,6 +574,10 @@ CLASS lcl_graph_list IMPLEMENTATION.
       ELSEIF ls_column-type = `number` OR ls_column-type = `currency`.
         lv_json = number_json( iv_name = ls_field-name iv_value = ls_field-value ).
         io_writer->add_raw( iv_name = ls_field-name iv_json = lv_json ).
+
+      ELSEIF ( ls_column-type = `boolean` OR ls_column-type = `dateTime` ) AND lv_value IS INITIAL.
+        " Empty clears the field; false or "" would be a value
+        io_writer->add_raw( iv_name = ls_field-name iv_json = `null` ).
 
       ELSEIF ls_column-type = `boolean`.
         lv_value = ls_field-value.
@@ -803,9 +832,17 @@ CLASS lcl_graph_list IMPLEMENTATION.
         EXPORTING
           text = lv_text.
     ENDIF.
-    " OData quotes a single quote by doubling it
-    REPLACE ALL OCCURRENCES OF `'` IN lv_key_value WITH `''`.
-    CONCATENATE `fields/` iv_key ` eq '` lv_key_value `'` INTO lv_filter.
+    " A number column is compared with a number, a text with a quoted text
+    " (a single quote inside doubled)
+    columns( ).
+    READ TABLE mt_columns INTO ls_column WITH KEY name = iv_key.
+    IF sy-subrc = 0 AND ( ls_column-type = `number` OR ls_column-type = `currency` ).
+      lv_key_value = number_json( iv_name = iv_key iv_value = lv_key_value ).
+      CONCATENATE `fields/` iv_key ` eq ` lv_key_value INTO lv_filter.
+    ELSE.
+      REPLACE ALL OCCURRENCES OF `'` IN lv_key_value WITH `''`.
+      CONCATENATE `fields/` iv_key ` eq '` lv_key_value `'` INTO lv_filter.
+    ENDIF.
     APPEND iv_key TO lt_select.
     lt_items = items( it_select = lt_select iv_filter = lv_filter iv_max = 2 ).
     lv_lines = lines( lt_items ).
@@ -870,6 +907,8 @@ CLASS ltc_graph_list DEFINITION FINAL FOR TESTING.
     METHODS upsert_updates FOR TESTING RAISING lcx_graph.
     METHODS upsert_race_unique FOR TESTING RAISING lcx_graph.
     METHODS upsert_other_error FOR TESTING.
+    METHODS upsert_number_key FOR TESTING RAISING lcx_graph.
+    METHODS clear_fields FOR TESTING RAISING lcx_graph.
 
     METHODS answer_columns.
 
@@ -1036,7 +1075,8 @@ CLASS ltc_graph_list IMPLEMENTATION.
     ls_request = request_at( 3 ).
     cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/sites/S1/lists/L1/items` ).
     CONCATENATE `{"fields":{"Title":"Fatura 4711","Amount":1234.50,"Done":true,`
-                `"Tags@odata.type":"Collection(Edm.String)","Tags":["a","b"],"OwnerLookupId":12}}` INTO lv_expected.
+                `"Tags@odata.type":"Collection(Edm.String)","Tags":["a","b"],`
+                `"OwnerLookupId@odata.type":"Collection(Edm.Int32)","OwnerLookupId":[12]}}` INTO lv_expected.
     cl_aunit_assert=>assert_equals( act = ls_request-body exp = lv_expected ).
   ENDMETHOD.
 
@@ -1060,17 +1100,20 @@ CLASS ltc_graph_list IMPLEMENTATION.
     DATA lt_fields TYPE lif_graph_lists=>ty_fields.
     DATA ls_request TYPE ltd_graph_http=>ty_request.
     DATA lv_id TYPE string.
+    DATA lv_uri TYPE string.
     DATA lv_created TYPE abap_bool.
 
-    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     mo_http->answer( iv_status = 201 iv_body = `{"id":"10","fields":{}}` ).
     lt_fields = lcl_graph_list=>fields_from_text( `Title=O'Brien Ltd|Amount=5` ).
     mo_cut->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields IMPORTING ev_id = lv_id ev_created = lv_created ).
     cl_aunit_assert=>assert_equals( act = lv_id exp = `10` ).
     cl_aunit_assert=>assert_equals( act = lv_created exp = abap_true ).
-    ls_request = request_at( 2 ).
-    cl_aunit_assert=>assert_char_cp( act = ls_request-uri exp = '*$filter=fields*Title*O*Brien*' ).
+    ls_request = request_at( 3 ).
+    " The quote of O'Brien doubled, then encoded
+    lv_uri = cl_http_utility=>unescape_url( escaped = ls_request-uri ).
+    cl_aunit_assert=>assert_char_cp( act = lv_uri exp = `*$filter=fields/Title eq 'O''Brien Ltd'` ).
     ls_request = request_at( 4 ).
     cl_aunit_assert=>assert_equals( act = ls_request-method exp = `POST` ).
   ENDMETHOD.
@@ -1084,8 +1127,8 @@ CLASS ltc_graph_list IMPLEMENTATION.
     DATA lv_created TYPE abap_bool.
     DATA lv_count TYPE i.
 
-    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     mo_http->answer( iv_status = 200 iv_body = `{"value":[{"name":"Title","text":{},"enforceUniqueValues":true},{"name":"Amount","number":{}}]}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     mo_http->answer( iv_status = 409 iv_body = `{"error":{"code":"conflict","message":"duplicate values were found in Title"}}` ).
     mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"8","fields":{"Title":"4711"}}]}` ).
     mo_http->answer( iv_status = 200 iv_body = `{}` ).
@@ -1111,8 +1154,8 @@ CLASS ltc_graph_list IMPLEMENTATION.
     DATA lx_graph TYPE REF TO lcx_graph.
     DATA lv_id TYPE string.
 
-    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[]}` ).
     mo_http->answer( iv_status = 400 iv_body = `{"error":{"code":"invalidRequest","message":"Field 'Amount' is not recognized"}}` ).
     lt_fields = lcl_graph_list=>fields_from_text( `Title=4711|Amount=5` ).
     TRY.
@@ -1124,14 +1167,47 @@ CLASS ltc_graph_list IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD upsert_number_key.
+    " A currency key is compared as a number, without quotes
+    DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lv_id TYPE string.
+    DATA lv_uri TYPE string.
+
+    answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"3","fields":{"Amount":5}}]}` ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    lt_fields = lcl_graph_list=>fields_from_text( `Amount=5|Title=Beş` ).
+    mo_cut->upsert( EXPORTING iv_key = `Amount` it_fields = lt_fields IMPORTING ev_id = lv_id ).
+    cl_aunit_assert=>assert_equals( act = lv_id exp = `3` ).
+    ls_request = request_at( 3 ).
+    lv_uri = cl_http_utility=>unescape_url( escaped = ls_request-uri ).
+    cl_aunit_assert=>assert_char_cp( act = lv_uri exp = `*$filter=fields/Amount eq 5` ).
+  ENDMETHOD.
+
+
+  METHOD clear_fields.
+    " Empty clears a yes/no and a date column
+    DATA lt_fields TYPE lif_graph_lists=>ty_fields.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+
+    answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{}` ).
+    lt_fields = lcl_graph_list=>fields_from_text( `Done= | Modified=` ).
+    mo_cut->update( iv_id = `9` it_fields = lt_fields ).
+    ls_request = request_at( 3 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-body exp = `{"Done":null,"Modified":null}` ).
+  ENDMETHOD.
+
+
   METHOD upsert_updates.
     DATA lt_fields TYPE lif_graph_lists=>ty_fields.
     DATA ls_request TYPE ltd_graph_http=>ty_request.
     DATA lv_id TYPE string.
     DATA lv_created TYPE abap_bool.
 
-    mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"7","fields":{"Title":"4711"}}]}` ).
     answer_columns( ).
+    mo_http->answer( iv_status = 200 iv_body = `{"value":[{"id":"7","fields":{"Title":"4711"}}]}` ).
     mo_http->answer( iv_status = 200 iv_body = `{"Title":"4711","Amount":5}` ).
     lt_fields = lcl_graph_list=>fields_from_text( `Title=4711|Amount=5` ).
     mo_cut->upsert( EXPORTING iv_key = `Title` it_fields = lt_fields IMPORTING ev_id = lv_id ev_created = lv_created ).

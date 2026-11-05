@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_TEAMS_LIB: messages to a Microsoft Teams channel through
 *& a Workflows webhook (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_TEAMS_LIB with type "Include
@@ -260,6 +260,10 @@ CLASS lcl_graph_teams IMPLEMENTATION.
     lv_answer = lcl_graph_conv=>from_utf8( ls_response-body ).
     IF strlen( lv_answer ) > 300.
       lv_answer = lv_answer(300).
+    ENDIF.
+    " A proxy's error page might repeat the address and its key: then not shown
+    IF lv_answer CS 'sig='.
+      CLEAR lv_answer.
     ENDIF.
     IF lv_answer IS NOT INITIAL.
       CONCATENATE lv_text lv_answer INTO lv_text SEPARATED BY space.

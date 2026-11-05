@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_MAIL_LIB: e-mail through Microsoft Graph (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_MAIL_LIB with type "Include
@@ -279,6 +279,8 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     mo_client = io_client.
     mv_mailbox = iv_mailbox.
     CONDENSE mv_mailbox.
+    " A guest address (name_domain#EXT#@tenant) would end the URL at the #
+    REPLACE ALL OCCURRENCES OF '#' IN mv_mailbox WITH '%23'.
     mv_max_direct_bytes = lif_graph_mail=>max_direct_bytes.
     mv_upload_chunk_bytes = lif_graph_mail=>upload_chunk_bytes.
     mv_upload_min_bytes = lif_graph_mail=>upload_min_bytes.
@@ -572,11 +574,16 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     DATA lv_json TYPE string.
     DATA lv_path TYPE string.
     DATA lv_save TYPE abap_bool.
+    DATA lv_body TYPE xstring.
 
     validate( is_mail ).
     LOOP AT is_mail-attachments INTO ls_attachment.
       lv_total = lv_total + xstrlen( ls_attachment-content ).
     ENDLOOP.
+    " The body goes as it is, the attachments a third larger (Base64): a large
+    " HTML body counts three quarters, as an attachment of that size would
+    lv_body = lcl_graph_conv=>to_utf8( is_mail-body ).
+    lv_total = lv_total + xstrlen( lv_body ) * 3 / 4.
     IF lv_total > mv_max_direct_bytes.
       send_as_draft( is_mail ).
       RETURN.
@@ -611,6 +618,9 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     DATA lv_path TYPE string.
     DATA lv_id TYPE string.
     DATA lv_size TYPE i.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_note TYPE string.
+    DATA lv_text TYPE string.
 
     CREATE OBJECT lo_writer.
     lo_writer->begin_object( ).
@@ -626,18 +636,39 @@ CLASS lcl_graph_mail IMPLEMENTATION.
           text = `Microsoft Graph created the draft but returned no ID.`.
     ENDIF.
 
-    LOOP AT is_mail-attachments INTO ls_attachment.
-      lv_size = xstrlen( ls_attachment-content ).
-      IF lv_size < mv_upload_min_bytes.
-        CREATE OBJECT lo_writer.
-        write_attachment( io_writer = lo_writer is_attachment = ls_attachment ).
-        lv_json = lo_writer->result( ).
-        lv_path = message_path( iv_message_id = lv_id iv_rest = `/attachments` ).
-        mo_client->send_json( iv_method = 'POST' iv_path = lv_path iv_json = lv_json ).
-      ELSE.
-        upload( iv_message_id = lv_id is_attachment = ls_attachment ).
-      ENDIF.
-    ENDLOOP.
+    TRY.
+        LOOP AT is_mail-attachments INTO ls_attachment.
+          lv_size = xstrlen( ls_attachment-content ).
+          IF lv_size < mv_upload_min_bytes.
+            CREATE OBJECT lo_writer.
+            write_attachment( io_writer = lo_writer is_attachment = ls_attachment ).
+            lv_json = lo_writer->result( ).
+            lv_path = message_path( iv_message_id = lv_id iv_rest = `/attachments` ).
+            mo_client->send_json( iv_method = 'POST' iv_path = lv_path iv_json = lv_json ).
+          ELSE.
+            upload( iv_message_id = lv_id is_attachment = ls_attachment ).
+          ENDIF.
+        ENDLOOP.
+      CATCH lcx_graph INTO lx_graph.
+        " Nothing was sent yet: the half-built draft goes, so that a new run
+        " does not leave a second one in Drafts
+        TRY.
+            lv_path = message_path( iv_message_id = lv_id ).
+            mo_client->delete_path( lv_path ).
+            lv_note = `Nothing was sent; the draft was deleted.`.
+          CATCH lcx_graph.
+            lv_note = `Nothing was sent; the draft could not be deleted and is in Drafts.`.
+        ENDTRY.
+        CONCATENATE lx_graph->text lv_note INTO lv_text SEPARATED BY space.
+        RAISE EXCEPTION TYPE lcx_graph
+          EXPORTING
+            text        = lv_text
+            hint        = lx_graph->hint
+            http_status = lx_graph->http_status
+            error_code  = lx_graph->error_code
+            request_id  = lx_graph->request_id
+            previous    = lx_graph.
+    ENDTRY.
 
     lv_path = message_path( iv_message_id = lv_id iv_rest = `/send` ).
     mo_client->request( iv_method = 'POST' iv_path = lv_path ).
@@ -662,6 +693,9 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     DATA lv_from TYPE string.
     DATA lv_to TYPE string.
     DATA lv_total TYPE string.
+    DATA ls_response TYPE lif_graph=>ty_response.
+    DATA lv_answer TYPE string.
+    DATA lx_graph TYPE REF TO lcx_graph.
 
     lv_size = xstrlen( is_attachment-content ).
     lv_type = content_type_of( is_attachment ).
@@ -689,25 +723,43 @@ CLASS lcl_graph_mail IMPLEMENTATION.
     ENDIF.
 
     lv_total = lcl_graph_conv=>num( lv_size ).
-    WHILE lv_offset < lv_size.
-      lv_length = lv_size - lv_offset.
-      IF lv_length > mv_upload_chunk_bytes.
-        lv_length = mv_upload_chunk_bytes.
-      ENDIF.
-      lv_chunk = is_attachment-content+lv_offset(lv_length).
-      lv_last = lv_offset + lv_length - 1.
-      lv_from = lcl_graph_conv=>num( lv_offset ).
-      lv_to = lcl_graph_conv=>num( lv_last ).
-      CLEAR lt_headers.
-      ls_header-name = 'Content-Type'.
-      ls_header-value = 'application/octet-stream'.
-      APPEND ls_header TO lt_headers.
-      ls_header-name = 'Content-Range'.
-      CONCATENATE `bytes ` lv_from '-' lv_to '/' lv_total INTO ls_header-value.
-      APPEND ls_header TO lt_headers.
-      mo_client->request_url( iv_method = 'PUT' iv_url = lv_url iv_body = lv_chunk it_headers = lt_headers ).
-      lv_offset = lv_offset + lv_length.
-    ENDWHILE.
+    TRY.
+        WHILE lv_offset < lv_size.
+          lv_length = lv_size - lv_offset.
+          IF lv_length > mv_upload_chunk_bytes.
+            lv_length = mv_upload_chunk_bytes.
+          ENDIF.
+          lv_chunk = is_attachment-content+lv_offset(lv_length).
+          lv_last = lv_offset + lv_length - 1.
+          lv_from = lcl_graph_conv=>num( lv_offset ).
+          lv_to = lcl_graph_conv=>num( lv_last ).
+          CLEAR lt_headers.
+          ls_header-name = 'Content-Type'.
+          ls_header-value = 'application/octet-stream'.
+          APPEND ls_header TO lt_headers.
+          ls_header-name = 'Content-Range'.
+          CONCATENATE `bytes ` lv_from '-' lv_to '/' lv_total INTO ls_header-value.
+          APPEND ls_header TO lt_headers.
+          ls_response = mo_client->request_url( iv_method = 'PUT' iv_url = lv_url iv_body = lv_chunk it_headers = lt_headers ).
+          lv_offset = lv_offset + lv_length.
+        ENDWHILE.
+        " After the last piece Microsoft must have the whole attachment; if it
+        " still expects bytes, the mail would go out without it
+        lv_answer = lcl_graph_conv=>from_utf8( ls_response-body ).
+        IF lv_answer CS `nextExpectedRanges`.
+          CONCATENATE `The upload of attachment ` is_attachment-name ` did not complete.` INTO lv_answer.
+          RAISE EXCEPTION TYPE lcx_graph
+            EXPORTING
+              text = lv_answer.
+        ENDIF.
+      CATCH lcx_graph INTO lx_graph.
+        " Close the upload session; it would otherwise stay open until it expires
+        TRY.
+            mo_client->request_url( iv_method = 'DELETE' iv_url = lv_url ).
+          CATCH lcx_graph.                                "#EC NO_HANDLER
+        ENDTRY.
+        RAISE EXCEPTION lx_graph.
+    ENDTRY.
   ENDMETHOD.
 
 
@@ -956,6 +1008,7 @@ CLASS ltc_graph_mail DEFINITION FINAL FOR TESTING.
     METHODS send_small FOR TESTING RAISING lcx_graph.
     METHODS send_large FOR TESTING RAISING lcx_graph.
     METHODS attachment_under_3mb FOR TESTING RAISING lcx_graph.
+    METHODS draft_deleted_on_error FOR TESTING.
     METHODS no_recipient FOR TESTING.
     METHODS list_unread FOR TESTING RAISING lcx_graph.
     METHODS attachment_bytes FOR TESTING RAISING lcx_graph.
@@ -1057,6 +1110,33 @@ CLASS ltc_graph_mail IMPLEMENTATION.
                 `"attachments":[{"@odata.type":"#microsoft.graph.fileAttachment","name":"a.txt","contentType":"text/plain",`
                 `"contentBytes":"aGVsbG8="}]},"saveToSentItems":true}` INTO lv_expected.
     cl_aunit_assert=>assert_equals( act = ls_request-body exp = lv_expected ).
+  ENDMETHOD.
+
+
+  METHOD draft_deleted_on_error.
+    DATA ls_mail TYPE lif_graph_mail=>ty_mail.
+    DATA ls_attachment TYPE lif_graph_mail=>ty_attachment.
+    DATA ls_request TYPE ltd_graph_http=>ty_request.
+    DATA lx_graph TYPE REF TO lcx_graph.
+
+    mo_cut->set_limits( iv_max_direct_bytes = 10 iv_upload_chunk_bytes = 4 iv_upload_min_bytes = 20 ).
+    ls_mail-subject = `Big`.
+    ls_mail-to = lcl_graph_mail=>addresses( `derya@b.com` ).
+    ls_attachment-name = `report.pdf`.
+    ls_attachment-content = bytes( `ABCDEFGHIJKL` ).
+    APPEND ls_attachment TO ls_mail-attachments.
+    mo_http->answer( iv_status = 201 iv_body = `{"id":"M1"}` ).
+    mo_http->answer( iv_status = 400 iv_body = `{"error":{"code":"ErrorInvalidRequest","message":"bad attachment"}}` ).
+    mo_http->answer( iv_status = 204 ).
+    TRY.
+        mo_cut->send( ls_mail ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*bad attachment*Nothing was sent; the draft was deleted.' ).
+    ls_request = request_at( 4 ).
+    cl_aunit_assert=>assert_equals( act = ls_request-method exp = `DELETE` ).
+    cl_aunit_assert=>assert_equals( act = ls_request-uri exp = `/v1.0/users/sap@contoso.com/messages/M1` ).
   ENDMETHOD.
 
 

@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CORE: Microsoft Graph from ABAP, shared core (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CORE with type "Include
@@ -30,7 +30,7 @@
 * Types and constants
 *----------------------------------------------------------------------*
 INTERFACE lif_graph.
-  CONSTANTS version TYPE string VALUE `0.7.1`.
+  CONSTANTS version TYPE string VALUE `0.7.2`.
   CONSTANTS default_login_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_LOGIN'.
   CONSTANTS default_api_destination TYPE rfcdest VALUE 'ZCHE_GRAPH_API'.
   CONSTANTS default_api_version TYPE string VALUE `v1.0`.
@@ -46,6 +46,9 @@ INTERFACE lif_graph.
       max_retries       TYPE i,
       " SSL client PSE for URLs Microsoft hands out (large uploads)
       ssl_id            TYPE ssfapplssl,
+      " X: never wait for a retry. WAIT UP TO commits the database, and an
+      " update task may not wait at all; the error comes at once instead
+      no_wait           TYPE abap_bool,
     END OF ty_config.
 
   TYPES:
@@ -1708,8 +1711,18 @@ CLASS lcl_graph_client DEFINITION FINAL.
         is_response TYPE lif_graph=>ty_response
         iv_method   TYPE string
         iv_path     TYPE string
+        iv_retried  TYPE abap_bool DEFAULT abap_false
       RAISING
         lcx_graph.
+
+    "! X when the answer may be waited for and the request sent again
+    METHODS may_retry
+      IMPORTING
+        is_response    TYPE lif_graph=>ty_response
+        iv_method      TYPE string
+        iv_attempt     TYPE i
+      RETURNING
+        value(rv_retry) TYPE abap_bool.
 
     METHODS wait_seconds
       IMPORTING
@@ -1777,6 +1790,8 @@ CLASS lcl_graph_client IMPLEMENTATION.
     DATA lv_attempt TYPE i.
     DATA lv_renewed TYPE abap_bool.
     DATA lv_seconds TYPE i.
+    DATA lv_retry TYPE abap_bool.
+    DATA lv_retried TYPE abap_bool.
 
     lv_uri = full_path( iv_path ).
     DO.
@@ -1807,13 +1822,8 @@ CLASS lcl_graph_client IMPLEMENTATION.
         lv_renewed = abap_true.
         CONTINUE.
       ENDIF.
-      " 429: Microsoft did not carry the request out, so any request may go again.
-      " 503/504: it may have been carried out; only requests that do the same
-      " when repeated go again, not POST or PATCH (a second mail, a second item)
-      IF lv_attempt < ms_config-max_retries
-         AND ( rs_response-status = 429
-            OR ( ( rs_response-status = 503 OR rs_response-status = 504 )
-             AND ( iv_method = 'GET' OR iv_method = 'PUT' OR iv_method = 'DELETE' ) ) ).
+      lv_retry = may_retry( is_response = rs_response iv_method = iv_method iv_attempt = lv_attempt ).
+      IF lv_retry = abap_true.
         lv_attempt = lv_attempt + 1.
         lv_seconds = wait_seconds( is_response = rs_response iv_attempt = lv_attempt ).
         IF lv_seconds > 0.
@@ -1824,8 +1834,29 @@ CLASS lcl_graph_client IMPLEMENTATION.
       EXIT.
     ENDDO.
 
-    IF rs_response-status >= 400.
-      raise_error( is_response = rs_response iv_method = iv_method iv_path = lv_uri ).
+    " A redirect is not followed: it would carry the token to another host
+    IF rs_response-status >= 300.
+      IF lv_attempt > 0.
+        lv_retried = abap_true.
+      ENDIF.
+      raise_error( is_response = rs_response iv_method = iv_method iv_path = lv_uri iv_retried = lv_retried ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD may_retry.
+    " 429: Microsoft did not carry the request out, so any request may go again.
+    " 503/504: it may have been carried out; only requests that do the same
+    " when repeated go again, not POST or PATCH (a second mail, a second item)
+    rv_retry = abap_false.
+    IF ms_config-no_wait = abap_true OR iv_attempt >= ms_config-max_retries.
+      RETURN.
+    ENDIF.
+    IF is_response-status = 429.
+      rv_retry = abap_true.
+    ELSEIF ( is_response-status = 503 OR is_response-status = 504 )
+       AND ( iv_method = 'GET' OR iv_method = 'PUT' OR iv_method = 'DELETE' ).
+      rv_retry = abap_true.
     ENDIF.
   ENDMETHOD.
 
@@ -1897,13 +1928,25 @@ CLASS lcl_graph_client IMPLEMENTATION.
         lv_hint = `The application lacks a permission for this call, admin consent is missing, or the mailbox or site is not in the allowed scope. Check the API permissions of the app registration.`.
       WHEN 404.
         lv_hint = `Not found: check the user, mailbox, site or item in the path.`.
+      WHEN 413.
+        lv_hint = `The request is larger than Microsoft accepts (about 4 MB). Send less at once.`.
       WHEN 429.
-        lv_hint = `Microsoft is busy or limiting requests; the call was retried. Run it again later or with smaller amounts.`.
+        IF iv_retried = abap_true.
+          lv_hint = `Microsoft is busy or limiting requests; the call was retried. Run it again later or with smaller amounts.`.
+        ELSE.
+          lv_hint = `Microsoft is busy or limiting requests. Run it again later or with smaller amounts.`.
+        ENDIF.
       WHEN 503 OR 504.
         IF iv_method = 'POST' OR iv_method = 'PATCH'.
           lv_hint = `The outcome is unknown: Microsoft may have carried the request out. Check (for a mail: Sent Items; for a list or table: its items) before you run it again.`.
-        ELSE.
+        ELSEIF iv_retried = abap_true.
           lv_hint = `Microsoft is busy; the call was retried. Run it again later.`.
+        ELSE.
+          lv_hint = `Microsoft is busy. Run it again later.`.
+        ENDIF.
+      WHEN OTHERS.
+        IF is_response-status >= 300 AND is_response-status < 400.
+          lv_hint = `Microsoft answered with a redirect, which is not followed. Use the call this library offers for downloads.`.
         ENDIF.
     ENDCASE.
 
@@ -1992,18 +2035,38 @@ CLASS lcl_graph_client IMPLEMENTATION.
   METHOD request_url.
     DATA lv_host TYPE string.
     DATA lv_rest TYPE string.
+    DATA lv_attempt TYPE i.
+    DATA lv_seconds TYPE i.
+    DATA lv_retry TYPE abap_bool.
+    DATA lv_retried TYPE abap_bool.
 
-    rs_response = mo_http->send_url( iv_url     = iv_url
-                                     iv_method  = iv_method
-                                     it_headers = it_headers
-                                     iv_body    = iv_body
-                                     iv_ssl_id  = ms_config-ssl_id ).
+    " The pieces of an upload go with PUT, which may go again: one 429 must
+    " not end an upload of 100 MB
+    DO.
+      rs_response = mo_http->send_url( iv_url     = iv_url
+                                       iv_method  = iv_method
+                                       it_headers = it_headers
+                                       iv_body    = iv_body
+                                       iv_ssl_id  = ms_config-ssl_id ).
+      lv_retry = may_retry( is_response = rs_response iv_method = iv_method iv_attempt = lv_attempt ).
+      IF lv_retry = abap_false.
+        EXIT.
+      ENDIF.
+      lv_attempt = lv_attempt + 1.
+      lv_seconds = wait_seconds( is_response = rs_response iv_attempt = lv_attempt ).
+      IF lv_seconds > 0.
+        WAIT UP TO lv_seconds SECONDS.
+      ENDIF.
+    ENDDO.
+    IF lv_attempt > 0.
+      lv_retried = abap_true.
+    ENDIF.
     IF rs_response-status >= 400.
       " The URL carries a key: only its host goes into the error text
       lv_host = iv_url.
       REPLACE FIRST OCCURRENCE OF 'https://' IN lv_host WITH ''.
       SPLIT lv_host AT '/' INTO lv_host lv_rest.
-      raise_error( is_response = rs_response iv_method = iv_method iv_path = lv_host ).
+      raise_error( is_response = rs_response iv_method = iv_method iv_path = lv_host iv_retried = lv_retried ).
     ENDIF.
   ENDMETHOD.
 
@@ -2443,6 +2506,9 @@ CLASS ltc_graph_client DEFINITION FINAL FOR TESTING.
     METHODS graph_error FOR TESTING.
     METHODS retry_after_429 FOR TESTING RAISING lcx_graph.
     METHODS retry_get_after_503 FOR TESTING RAISING lcx_graph.
+    METHODS retry_upload_piece FOR TESTING RAISING lcx_graph.
+    METHODS no_wait_no_retry FOR TESTING.
+    METHODS redirect_is_error FOR TESTING.
     METHODS no_retry_post_after_504 FOR TESTING.
     METHODS new_token_after_401 FOR TESTING RAISING lcx_graph.
     METHODS paging FOR TESTING RAISING lcx_graph.
@@ -2588,6 +2654,62 @@ CLASS ltc_graph_client IMPLEMENTATION.
     mo_cut->get_json( `/users` ).
     lv_count = lines( mo_http->mt_requests ).
     cl_aunit_assert=>assert_equals( act = lv_count exp = 3 ).
+  ENDMETHOD.
+
+
+  METHOD retry_upload_piece.
+    " A piece of an upload: 429, then accepted. No token: the URL has its own key
+    DATA lv_count TYPE i.
+    DATA ls_response TYPE lif_graph=>ty_response.
+    mo_http->answer( iv_status = 429 iv_retry_after = `0` ).
+    mo_http->answer( iv_status = 202 iv_body = `{}` ).
+    ls_response = mo_cut->request_url( iv_method = 'PUT' iv_url = `https://upload.example/up?key=1` ).
+    cl_aunit_assert=>assert_equals( act = ls_response-status exp = 202 ).
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
+  ENDMETHOD.
+
+
+  METHOD no_wait_no_retry.
+    DATA ls_config TYPE lif_graph=>ty_config.
+    DATA lo_client TYPE REF TO lcl_graph_client.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_count TYPE i.
+
+    ls_config = lcl_graph_client=>default_config( `nowait.onmicrosoft.com` ).
+    ls_config-no_wait = abap_true.
+    CREATE OBJECT lo_client
+      EXPORTING
+        is_config = ls_config
+        io_http   = mo_http.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 429 iv_retry_after = `0` ).
+    TRY.
+        lo_client->get_json( `/users` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->http_status exp = 429 ).
+    " Not retried, and the hint does not claim it was
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->hint exp = '*Run it again later*' ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->hint
+                                    exp = `Microsoft is busy or limiting requests. Run it again later or with smaller amounts.` ).
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 2 ).
+  ENDMETHOD.
+
+
+  METHOD redirect_is_error.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    mo_http->token_answer( ).
+    mo_http->answer( iv_status = 302 ).
+    TRY.
+        mo_cut->get_json( `/drives/D1/items/X1/content` ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `a redirect was taken for an answer` ).
+    cl_aunit_assert=>assert_equals( act = lx_graph->http_status exp = 302 ).
+    cl_aunit_assert=>assert_char_cp( act = lx_graph->hint exp = '*redirect*' ).
   ENDMETHOD.
 
 

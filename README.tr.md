@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.7.1, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.2, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı ve takvim modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi; Teams modülü henüz gerçek bir kanalla denenmedi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -142,7 +142,7 @@ ENDTRY.
 
 ### Microsoft çağrıları ve SAP işlemleri (transaction)
 
-Microsoft'a yapılan çağrı SAP işleminin parçası değildir: gönderilen e-posta ya da oluşturulan kayıt, programınız sonra hata verse ya da geri alsa (rollback) da kalır. Ayrıca çekirdek, HTTP 429 sonrası yeniden denerken `WAIT UP TO` ile bekler; bu da programınızın açık veritabanı değişikliklerini kaydeder (commit). Bu yüzden:
+Microsoft'a yapılan çağrı SAP işleminin parçası değildir: gönderilen e-posta ya da oluşturulan kayıt, programınız sonra hata verse ya da geri alsa (rollback) da kalır. Ayrıca çekirdek, HTTP 429 sonrası yeniden denerken `WAIT UP TO` ile bekler; bu da programınızın açık veritabanı değişikliklerini kaydeder (commit). Yapılandırmada `no_wait = abap_true` verilirse beklemeden hemen hata gelir; örneğin beklemenin yasak olduğu update task'ta. Bu yüzden:
 - modülleri veritabanı değişiklikleriniz ile commit arasında değil, `COMMIT WORK`'ten **sonra** çağırın;
 - bir çağrı kaybolmamalıysa, gönderilecek olanı aynı işlemde kendi tablonuza yazın; bir iş onu göndersin ve gönderildi diye işaretlesin (*outbox*).
 
@@ -594,7 +594,7 @@ SAP'deki tarihleri Outlook takvimlerine koyar. Tipik kullanımlar:
 Modül, `ZCHE_GRAPH_CALENDAR_LIB` include'u (`LCL_GRAPH_CALENDAR` sınıfı) ve `ZCHE_GRAPH_CALENDAR` programından oluşur.
 
 - **Etkinlik oluşturma:** bir kullanıcının ya da paylaşılan posta kutusunun takviminde. Konu, metin, saat ya da tüm gün, yer, zorunlu ve isteğe bağlı katılımcılar (davet alırlar), hatırlatma, "farklı göster", kategoriler.
-- **Kendi anahtarınız** (`transaction_id`), örneğin emir numarası: Microsoft bir anahtar için yalnız bir etkinlik oluşturur. Aynı iş iki kez çalışsa da iki etkinlik olmaz.
+- **Kendi anahtarınız** (`transaction_id`), örneğin emir numarası: Microsoft bir anahtar için yalnız bir etkinlik oluşturur. Aynı iş iki kez çalışsa da iki etkinlik olmaz. Aynı anahtar başka ayrıntılı bir etkinlik için kullanılırsa reddedilir (`ErrorDuplicateTransactionId`); bu test tenant'ında görüldü.
 - **Listeleme:** bir dönemin etkinlikleri; yinelenen etkinliklerin her tekrarı ayrı satırdır.
 - **Değiştirme** (katılımcılara güncelleme gider), **iptal** (katılımcılara açıklamayla iptal gider) ya da yalnız bu takvimden **silme**.
 - **Teams toplantısı:** `teams_meeting = X` ile Microsoft bir Teams toplantısı açar ve katılma bağlantısını davete ve `join_url` alanına koyar. Düzenleyici posta kutusudur; Teams lisansı gerekir, paylaşılan kutunun lisansı yoktur.
@@ -766,6 +766,16 @@ Kod incelemesinde bulunup 0.7.1'de düzeltilenler:
 - Birden çok kişi seçilebilen kişi sütunu tek kişilik sanılıyordu.
 - Negatif sayı JSON'a `5-` olarak yazılıyordu.
 - Çalışma sayfası ekleme yanlış adrese gidiyordu (`worksheets/add`); tenant'ta denenmedi.
+
+0.7.2'de de:
+
+- Büyük yüklemenin parçaları, diğer PUT istekleri gibi HTTP 429, 503 ya da 504'ten sonra tekrar gönderiliyor. Başarısız bir yükleme oturumunu kapatıyor; başarısız büyük e-posta yarım kalan taslağını siliyor ve bunu söylüyor.
+- Son parçadan sonra hâlâ bayt eksikse bu bir hata; boş bir dosyayla "OK Uploaded" ya da eki olmayan bir e-posta değil.
+- E-postanın tek isteğe sığıp sığmadığı hesaplanırken yalnız ekler değil, gövde de sayılıyor. HTTP 413 için ipucu var.
+- İpuçları "yeniden denendi" sözünü yalnız gerçekten denendiğinde söylüyor; yönlendirme (3xx) hata sayılıyor ve takip edilmiyor.
+- Takvimde bir günün listesi artık önceki günün tüm gün etkinliklerini göstermiyor; başka saat diliminde Outlook'ta oluşturulmuş tüm gün etkinlik doğru tarihini alıyor. Kimse verilmeden ya da bitiş başlangıçtan önceyken boş zaman aramak hata veriyor.
+- Listeler: `OwnerLookupId`, sütun birden çok değere izin veriyorsa ID listesi yazıyor; kendi adı LookupId ile biten bir sütun kendi türünü koruyor; boş değer evet/hayır ya da tarih alanını temizliyor; `upsert`'te sayı tipindeki anahtar sütun sayı olarak karşılaştırılıyor.
+- `#` içeren konuk adresleri e-posta ve takvimde çalışıyor; klasör yolları çözülmüş olarak geliyor; SAP hesap kontrolü 100.000 kullanıcının üstünde hata veriyor; Teams hatası web kancası anahtarını içeren bir cevabı asla göstermiyor.
 
 ### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
 

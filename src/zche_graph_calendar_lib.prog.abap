@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR_LIB: Outlook calendar through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.1, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CALENDAR_LIB with type
@@ -238,6 +238,17 @@ CLASS lcl_graph_calendar DEFINITION FINAL.
       RAISING
         lcx_graph.
 
+    "! The day of an all-day event. One made here starts at midnight UTC; one
+    "! made in Outlook in another time zone comes as, say, 21:00 UTC the day
+    "! before, which is midnight in that zone.
+    METHODS all_day_date
+      IMPORTING
+        iv_text        TYPE string
+      RETURNING
+        value(rv_date) TYPE d
+      RAISING
+        lcx_graph.
+
     "! Raises the error for a time zone SAP cannot convert in
     CLASS-METHODS time_zone_error
       IMPORTING
@@ -285,7 +296,11 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
 
 
   METHOD path.
-    CONCATENATE `/users/` mv_mailbox iv_rest INTO rv_path.
+    DATA lv_mailbox TYPE string.
+    " A guest address (name_domain#EXT#@tenant) would end the URL at the #
+    lv_mailbox = mv_mailbox.
+    REPLACE ALL OCCURRENCES OF '#' IN lv_mailbox WITH '%23'.
+    CONCATENATE `/users/` lv_mailbox iv_rest INTO rv_path.
   ENDMETHOD.
 
 
@@ -337,6 +352,16 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     CONVERT TIME STAMP lv_stamp TIME ZONE iv_time_zone INTO DATE ev_date TIME ev_time.
     IF sy-subrc > 4.
       time_zone_error( iv_time_zone ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD all_day_date.
+    DATA lv_time TYPE t.
+    CONCATENATE iv_text(4) iv_text+5(2) iv_text+8(2) INTO rv_date.
+    IF strlen( iv_text ) >= 19 AND iv_text+11(8) <> `00:00:00`.
+      from_utc( EXPORTING iv_text = iv_text iv_time_zone = mv_time_zone
+                IMPORTING ev_date = rv_date ev_time = lv_time ).
     ENDIF.
   ENDMETHOD.
 
@@ -574,10 +599,10 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     CONCATENATE iv_prefix `end/dateTime` INTO lv_field.
     IF rs_event-all_day = abap_true AND strlen( lv_value ) >= 10.
       " Whole days stay days; the end day Microsoft gives is the day after
-      CONCATENATE lv_value(4) lv_value+5(2) lv_value+8(2) INTO rs_event-start_date.
+      rs_event-start_date = all_day_date( lv_value ).
       lv_value = io_json->get( lv_field ).
       IF strlen( lv_value ) >= 10.
-        CONCATENATE lv_value(4) lv_value+5(2) lv_value+8(2) INTO rs_event-end_date.
+        rs_event-end_date = all_day_date( lv_value ).
         rs_event-end_date = rs_event-end_date - 1.
       ENDIF.
     ELSE.
@@ -691,6 +716,12 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
         lv_number = lcl_graph_conv=>num( lv_index ).
         CONCATENATE `value/` lv_number `/` INTO lv_prefix.
         ls_event = event_from_json( io_json = lo_page iv_prefix = lv_prefix ).
+        " The window is local midnight to midnight, all-day events lie from
+        " midnight UTC: east of UTC the day before overlaps the window
+        IF ls_event-all_day = abap_true
+           AND ( ls_event-end_date < iv_from OR ls_event-start_date > iv_to ).
+          CONTINUE.
+        ENDIF.
         APPEND ls_event TO rt_events.
         lv_lines = lines( rt_events ).
         IF lv_lines >= iv_max.
@@ -820,8 +851,26 @@ CLASS lcl_graph_calendar IMPLEMENTATION.
     DATA lv_free TYPE abap_bool.
     DATA lv_length TYPE i.
     DATA lv_seconds TYPE i.
+    DATA lv_people TYPE i.
 
     CLEAR: ev_found, ev_start, ev_end.
+    IF iv_to <= iv_from.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `The end of the window is not after its start.`.
+    ENDIF.
+    LOOP AT it_addresses INTO lv_text.
+      lv_text = lcl_graph_conv=>trim( lv_text ).
+      IF lv_text IS NOT INITIAL.
+        lv_people = lv_people + 1.
+      ENDIF.
+    ENDLOOP.
+    " Without anyone every time would count as free
+    IF lv_people = 0.
+      RAISE EXCEPTION TYPE lcx_graph
+        EXPORTING
+          text = `No one to find a free time for: give at least one address.`.
+    ENDIF.
     lt_free_busy = free_busy( it_addresses = it_addresses iv_date = iv_date
                               iv_from = iv_from iv_to = iv_to iv_interval = lc_interval ).
     LOOP AT lt_free_busy INTO ls_free_busy WHERE error IS NOT INITIAL.
@@ -901,6 +950,8 @@ CLASS ltc_graph_calendar DEFINITION FINAL FOR TESTING.
     METHODS teams_weekly_series FOR TESTING RAISING lcx_graph.
     METHODS wrong_repeat FOR TESTING.
     METHODS free_time FOR TESTING RAISING lcx_graph.
+    METHODS free_time_nobody FOR TESTING.
+    METHODS all_day_other_zone FOR TESTING RAISING lcx_graph.
 
     METHODS request_at
       IMPORTING
@@ -1131,6 +1182,53 @@ CLASS ltc_graph_calendar IMPLEMENTATION.
     ENDTRY.
     cl_aunit_assert=>assert_bound( act = lx_graph msg = `no error raised` ).
     cl_aunit_assert=>assert_char_cp( act = lx_graph->text exp = '*Unknown repeat*' ).
+  ENDMETHOD.
+
+
+  METHOD free_time_nobody.
+    DATA lt_addresses TYPE lif_graph_calendar=>ty_addresses.
+    DATA lx_graph TYPE REF TO lcx_graph.
+    DATA lv_found TYPE abap_bool.
+    DATA lv_count TYPE i.
+
+    APPEND `  ` TO lt_addresses.
+    TRY.
+        mo_cut->find_free_time( EXPORTING it_addresses = lt_addresses iv_date = '20261110'
+                                          iv_from = '090000' iv_to = '110000' iv_minutes = 30
+                                IMPORTING ev_found = lv_found ).
+      CATCH lcx_graph INTO lx_graph.
+    ENDTRY.
+    cl_aunit_assert=>assert_bound( act = lx_graph msg = `nobody was found free` ).
+    " Nothing was asked of Microsoft (the token answer is still queued)
+    lv_count = lines( mo_http->mt_requests ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 0 ).
+  ENDMETHOD.
+
+
+  METHOD all_day_other_zone.
+    " Made in Outlook in UTC+3 for 31 December (21:00 UTC the day before), and
+    " one made here for 1 January (midnight UTC); listed for 1 January only:
+    " the first is another day and is left out
+    DATA lt_events TYPE lif_graph_calendar=>ty_events.
+    DATA ls_event TYPE lif_graph_calendar=>ty_event.
+    DATA lv_answer TYPE string.
+    DATA lv_count TYPE i.
+
+    CONCATENATE `{"value":[{"id":"E1","isAllDay":true,"start":{"dateTime":"2026-12-30T21:00:00.0000000"},"end":{"dateTime":"2026-12-31T21:00:00.0000000"}},`
+                `{"id":"E2","isAllDay":true,"start":{"dateTime":"2027-01-01T00:00:00.0000000"},"end":{"dateTime":"2027-01-02T00:00:00.0000000"}}]}` INTO lv_answer.
+    mo_http->answer( iv_status = 200 iv_body = lv_answer ).
+    lt_events = mo_cut->events( iv_from = '20270101' iv_to = '20270101' ).
+    lv_count = lines( lt_events ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+    READ TABLE lt_events INDEX 1 INTO ls_event.
+    cl_aunit_assert=>assert_equals( act = ls_event-id exp = `E2` ).
+    cl_aunit_assert=>assert_equals( act = ls_event-start_date exp = '20270101' ).
+    cl_aunit_assert=>assert_equals( act = ls_event-end_date exp = '20270101' ).
+    " And the Outlook one, read on its own, is 31 December
+    mo_http->answer( iv_status = 200 iv_body = `{"id":"E1","isAllDay":true,"start":{"dateTime":"2026-12-30T21:00:00.0000000"},"end":{"dateTime":"2026-12-31T21:00:00.0000000"}}` ).
+    ls_event = mo_cut->event( `E1` ).
+    cl_aunit_assert=>assert_equals( act = ls_event-start_date exp = '20261231' ).
+    cl_aunit_assert=>assert_equals( act = ls_event-end_date exp = '20261231' ).
   ENDMETHOD.
 
 
