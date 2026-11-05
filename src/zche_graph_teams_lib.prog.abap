@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_TEAMS_LIB: messages to a Microsoft Teams channel through
 *& a Workflows webhook (INCLUDE)
-*& abap-graph 0.7.2, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.7.3, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_TEAMS_LIB with type "Include

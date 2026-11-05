@@ -16,7 +16,7 @@ SAP'yi Microsoft 365 ile yalnızca ABAP kullanarak, **Microsoft Graph** üzerind
 - **ABAP 7.00 sözdizimi:** ECC 6.0 ve sonrası için yazıldı, S/4HANA dahil. Şimdiye kadar yalnız SAP_BASIS 816'da çalıştı; bkz. [Neler doğrulandı](#neler-doğrulandı).
 - **Gizli anahtar SM59'da durur:** kod onu hiç görmez.
 
-> **Durum: v0.7.2, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
+> **Durum: v0.7.3, henüz yayınlanmadı.** Çekirdek, bağlantı testi ve e-posta, dosya, liste, Excel, kullanıcı, takvim ve Teams modülleri SAP ABAP Cloud Developer Trial sisteminden gerçek bir Microsoft 365 test tenant'ına karşı denendi. En az yetkiyle ve gerçek bir 7.00 sisteminde denenmedi (bkz. [Neler doğrulandı](#neler-doğrulandı)).
 
 ## Nasıl çalışır
 
@@ -780,6 +780,10 @@ Kod incelemesinde bulunup 0.7.1'de düzeltilenler:
 - Takvimde bir günün listesi artık önceki günün tüm gün etkinliklerini göstermiyor; başka saat diliminde Outlook'ta oluşturulmuş tüm gün etkinlik doğru tarihini alıyor. Kimse verilmeden ya da bitiş başlangıçtan önceyken boş zaman aramak hata veriyor.
 - Listeler: `OwnerLookupId`, sütun birden çok değere izin veriyorsa ID listesi yazıyor; kendi adı LookupId ile biten bir sütun kendi türünü koruyor; boş değer evet/hayır ya da tarih alanını temizliyor; `upsert`'te sayı tipindeki anahtar sütun sayı olarak karşılaştırılıyor.
 - `#` içeren konuk adresleri e-posta ve takvimde çalışıyor; klasör yolları çözülmüş olarak geliyor; SAP hesap kontrolü 100.000 kullanıcının üstünde hata veriyor; Teams hatası web kancası anahtarını içeren bir cevabı asla göstermiyor.
+
+Tenant'ta bulunan ve 0.7.3'te düzeltilen:
+
+- `ZCHE_GRAPH_TEAMS`'in eklediği "Zaman" satırı, sunucunun saatini kullanıcının saat dilimi adıyla gösteriyordu (test sisteminde UTC saati CET etiketiyle, bir saat farkla). Artık kullanıcının kendi tarih ve saatini gösteriyor. Aynı sebeple `ZCHE_GRAPH_CALENDAR`'ın önerdiği tarih artık sunucunun değil, kullanıcının bugünü.
 
 ### Birim testleri ve uydurma bilgiler, 2 Kasım 2026
 
