@@ -3,6 +3,9 @@
 /TENANT-TEST.md
 /*.local.md
 
+# Dependencies
+/node_modules/
+
 # Editor and OS files
 .vscode/
 .idea/
