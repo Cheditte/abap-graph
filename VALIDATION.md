@@ -4,7 +4,7 @@
 
 **English** | [Türkçe](VALIDATION.tr.md)
 
-This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.8.0, not yet released; the group-and-role and SU01 comparisons added in 0.8.0 have not been tried in SAP yet.
+This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.8.0, not yet released; its comparisons with SAP were tried on the tenant on 6 November (see below).
 
 ## What has been verified
 
@@ -44,6 +44,10 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 - **Calendar again, 0.7.2 (5 November):** a weekly Teams meeting twice, 15:00–15:30 `TURKEY`, in a licensed user's calendar: SAP listed both occurrences with the join link, and the user's Outlook (set to Istanbul) showed 15:00–15:30 with a **Join** button. The free-time search found 14:00–14:30 in a window of 14:00–16:00; then the series was deleted and the list of that week was empty. An earlier event created for 14:00 had appeared at 11:00 in a shared mailbox's Outlook: that mailbox was set to UTC (see [Outlook calendar](TECHNICAL.md#outlook-calendar)).
 - **E-mail to `"SAP, Test" <sap@…>` (0.7.2):** one recipient, accepted by Microsoft. Delivery was not checked in the inbox.
 - **Teams channel messages (0.7.2):** a Workflows webhook in a channel, its address in an SM59 destination of type G (the whole address fit into the path prefix). `ZCHE_GRAPH_TEAMS` sent a `warning` card with two name/value lines and the system, user and time: it appeared in the channel with the title in the warning colour.
+- **Comparisons with SAP (6 November, 0.8.0):** one SAP test user (`BWDEVELOPER`, with role `ZDEVELOPER`) was given the address of the shared mailbox, whose Microsoft account is disabled. The other trial users still had no address.
+  - The SAP account check compared that one user and reported *Microsoft account disabled*.
+  - The group `SAP Test` (one member, the tenant administrator) against role `ZDEVELOPER` gave three findings: the member has no SAP user with that address; `BWDEVELOPER` has the role but is not in the group; `DEVELOPER` has the role but no address, so it was not compared.
+  - SU01 against Entra ID compared that one user and first found no difference: the mailbox's account had no first name, last name, department or job title, and an empty Entra ID value is never proposed. After first name `Test`, last name `SAP` and department `IT` were entered in the Entra admin center, the same run listed three differences: first name `Doe` → `Test`, last name `Jane` → `SAP`, department empty → `IT` (the SU01 names are those of the trial system). Job title, still empty in Entra ID, was not proposed.
 
 Found on the tenant and fixed in 0.5.1:
 

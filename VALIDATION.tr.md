@@ -4,7 +4,7 @@
 
 [English](VALIDATION.md) | **Türkçe**
 
-Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.8.0, henüz yayımlanmamış olarak kayıtlıdır; 0.8.0'da eklenen grup–rol ve SU01 karşılaştırmaları henüz SAP'de denenmedi.
+Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.8.0, henüz yayımlanmamış olarak kayıtlıdır; SAP ile karşılaştırmaları 6 Kasım'da tenant'ta denendi (aşağıya bakın).
 
 ## Neler doğrulandı
 
@@ -44,6 +44,10 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 - **Takvim yeniden, 0.7.2 (5 Kasım):** lisanslı bir kullanıcının takviminde, 15:00–15:30 `TURKEY`, iki kez tekrarlanan haftalık bir Teams toplantısı: SAP iki tekrarı da katılma bağlantısıyla listeledi; kullanıcının İstanbul'a ayarlı Outlook'u 15:00–15:30'u **Katıl** düğmesiyle gösterdi. Boş zaman araması 14:00–16:00 penceresinde 14:00–14:30'u buldu; sonra seri silindi ve o haftanın listesi boş döndü. Daha önce 14:00'e oluşturulan bir etkinlik, bir paylaşılan posta kutusunun Outlook'unda 11:00'de görünmüştü: o kutu UTC'ye ayarlıydı (bkz. [Outlook takvimi](TECHNICAL.tr.md#outlook-takvimi)).
 - **`"SAP, Test" <sap@…>` adresine e-posta (0.7.2):** tek alıcı; Microsoft kabul etti. Gelen kutusunda teslim ayrıca kontrol edilmedi.
 - **Teams kanal mesajları (0.7.2):** bir kanalda Workflows web kancası, adresi G tipi bir SM59 hedefinde (adresin tamamı yol önekine sığdı). `ZCHE_GRAPH_TEAMS` iki ad/değer satırı ve sistem, kullanıcı, zaman bilgisiyle bir `warning` kartı gönderdi: kart kanalda, başlığı uyarı renginde göründü.
+- **SAP ile karşılaştırmalar (6 Kasım, 0.8.0):** bir SAP test kullanıcısına (`BWDEVELOPER`, `ZDEVELOPER` rolüyle) Microsoft hesabı kapalı olan paylaşılan posta kutusunun adresi girildi. Deneme sistemindeki diğer kullanıcıların hâlâ adresi yoktu.
+  - SAP hesap kontrolü bu kullanıcıyı karşılaştırdı ve *Microsoft hesabı kapalı* bulgusunu verdi.
+  - `SAP Test` grubu (tek üye: tenant yöneticisi) ile `ZDEVELOPER` rolü karşılaştırması üç bulgu verdi: üyenin bu adresle bir SAP kullanıcısı yok; `BWDEVELOPER` rolde var ama grupta yok; `DEVELOPER` rolde var ama adresi olmadığı için karşılaştırılmadı.
+  - SU01 ile Entra ID karşılaştırması bu kullanıcıyı karşılaştırdı ve önce fark bulmadı: posta kutusunun hesabında ad, soyad, departman ya da unvan yoktu; Entra ID'deki boş bir değer hiçbir zaman öneri olarak gösterilmiyor. Entra yönetim merkezinde ad `Test`, soyad `SAP` ve departman `IT` girildikten sonra aynı çalıştırma üç fark listeledi: ad `Doe` → `Test`, soyad `Jane` → `SAP`, departman boş → `IT` (SU01'deki adlar deneme sisteminin kendi verisi). Entra ID'de hâlâ boş olan unvan önerilmedi.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
