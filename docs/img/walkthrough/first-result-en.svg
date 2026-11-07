@@ -1,27 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="600" viewBox="0 0 1280 600" role="img" aria-labelledby="title desc">
 <title id="title">Setup and first use</title><desc id="desc">Three stages: prepare the Microsoft service and access; install the SAP files and connection; check a sample result in SAP and Microsoft.</desc>
-<rect x="0" y="0" width="1280" height="480" rx="0" fill="#f4f7fa" />
-<rect x="0" y="0" width="1280" height="480" rx="0" fill="#ffffff" />
-<rect x="44" y="34" width="5" height="26" rx="0" fill="#176e78" />
-<text x="64" y="53" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#536779">abap-graph  /  SETUP ORDER</text>
-<text x="44" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#152b3e">Setup and first use</text>
-<text x="44" y="157" font-family="Segoe UI, Arial, sans-serif" font-size="23" font-weight="400" fill="#536779">The same order for every route: prepare, install and check.</text>
-<polyline points="44,193 1236,193" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
-<text x="44" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">01</text>
-<text x="44" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">Microsoft preparation</text>
-<text x="44" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Service and access</text>
-<text x="44" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Prepare access to the mailbox,</text>
-<text x="44" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">site, calendar or channel.</text>
-<polyline points="432,226 432,417" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
-<text x="454" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">02</text>
-<text x="454" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">SAP preparation</text>
-<text x="454" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Files and connection</text>
-<text x="454" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Add the required ABAP files;</text>
-<text x="454" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">configure the SM59 connection.</text>
-<polyline points="842,226 842,417" fill="none" stroke="#dbe3ea" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
-<text x="864" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#176e78">03</text>
-<text x="864" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#152b3e">Check the result</text>
-<text x="864" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#152b3e">Sample operation</text>
-<text x="864" y="374" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">Run a sample and check it</text>
-<text x="864" y="407" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#536779">in SAP and Microsoft.</text>
-</svg>
+<rect x="0" y="0" width="1280" height="600" rx="0" fill="#231A28" />
+<rect x="0" y="0" width="1280" height="600" rx="0" fill="#231A28" />
+<rect x="44" y="34" width="5" height="26" rx="0" fill="#D4E86A" />
+<text x="64" y="53" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#BDB4C2">abap-graph  /  SETUP ORDER</text>
+<text x="44" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#F4F0E8">Setup and first use</text>
+<text x="44" y="157" font-family="Segoe UI, Arial, sans-serif" font-size="23" font-weight="400" fill="#BDB4C2">The same order for every route: prepare, install and check.</text>
+<polyline points="44,193 1236,193" fill="none" stroke="#605269" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<text x="44" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#D4E86A">01</text>
+<text x="44" y="403" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#F4F0E8">Microsoft preparation</text>
+<text x="44" y="442" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#F4F0E8">Service and access</text>
+<text x="44" y="484" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">Prepare access to the mailbox,</text>
+<text x="44" y="517" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">site, calendar or channel.</text>
+<polyline points="432,226 432,527" fill="none" stroke="#605269" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<text x="454" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#D4E86A">02</text>
+<text x="454" y="403" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#F4F0E8">SAP preparation</text>
+<text x="454" y="442" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#F4F0E8">Files and connection</text>
+<text x="454" y="484" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">Add the required ABAP files;</text>
+<text x="454" y="517" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">configure the SM59 connection.</text>
+<polyline points="842,226 842,527" fill="none" stroke="#605269" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<text x="864" y="247" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#D4E86A">03</text>
+<text x="864" y="403" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700" fill="#F4F0E8">Check the result</text>
+<text x="864" y="442" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#F4F0E8">Sample operation</text>
+<text x="864" y="484" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">Run a sample and check it</text>
+<text x="864" y="517" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="400" fill="#BDB4C2">in SAP and Microsoft.</text>
+<g transform="translate(44 269)"><path d="M8 58V24L46 4l50 20v34L58 79Z" fill="#302638" stroke="#F4F0E8" stroke-width="3"/><path d="M8 24l50 20 38-20M58 44v35" fill="none" stroke="#F4F0E8" stroke-width="3"/><circle cx="43" cy="27" r="9" fill="none" stroke="#D4E86A" stroke-width="5"/><path d="M50 34l18 13m-6-6l6-5" stroke="#D4E86A" stroke-width="5"/></g><g transform="translate(454 269)"><path d="M8 26L42 8l54 20-34 18Z" fill="#F4F0E8" stroke="#F4F0E8" stroke-width="3"/><path d="M8 26v22l54 20 34-18V28L62 46Z" fill="#302638" stroke="#F4F0E8" stroke-width="3"/><path d="M8 54v22l54 20 34-18V56" fill="#302638" stroke="#F4F0E8" stroke-width="3"/><path d="M62 46v50" stroke="#F4F0E8" stroke-width="3"/><circle cx="46" cy="49" r="4" fill="#D4E86A"/><circle cx="46" cy="77" r="4" fill="#D4E86A"/></g><g transform="translate(864 269)"><path d="M8 15h88v57H8Z" fill="#302638" stroke="#F4F0E8" stroke-width="3"/><path d="M17 24h70v39H17Z" fill="#F4F0E8"/><path d="M39 72v14m25-14v14M27 87h49" stroke="#F4F0E8" stroke-width="4"/><path d="M34 43l12 12 25-26" fill="none" stroke="#7D9329" stroke-width="6"/></g></svg>
