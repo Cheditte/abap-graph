@@ -2,7 +2,7 @@
 
 [Project](README.md) · [Source files](src) · **English** | [Türkçe](WALKTHROUGH.tr.md)
 
-**abap-graph** brings together ABAP files and example programs for accessing Microsoft 365 from SAP. Mail, file transfers, calendars and Teams notifications can be used as separate sections.
+**abap-graph** brings together ABAP files and example programs for accessing Microsoft 365 from SAP. Mail, file transfers, calendars, Teams notifications and Entra ID user checks can be used as separate sections.
 
 This guide starts with the task you want to complete, then explains the preparation and first-use steps. The source files are in the [src folder](src); screenshots show the test environment. **Install only the section you need.** For example, sending a Teams channel message does not require the Mail or Excel sections.
 
@@ -12,7 +12,7 @@ This guide starts with the task you want to complete, then explains the preparat
 
 A shared helper file handles connections and data exchange. Add it to SAP once, then add the files for your chosen task. Teams **channel notifications** use a Workflow connection created in Teams.
 
-![Seven tasks: Teams notification, Teams meeting and calendar, mail, files, Excel cells, SharePoint lists, users. Choose only the route you need.](docs/img/walkthrough/choose-your-route-en.svg)
+![Choose your task: Teams notification, calendar, mail, files, Excel cells, lists, or Entra ID users and SAP checks.](docs/img/walkthrough/choose-your-route-en.svg)
 
 ## 1. What would you like to do?
 
@@ -27,8 +27,11 @@ Each section covers its own preparation, required files and first trial. Choose 
 | Read or change cells in an existing Excel workbook | [Excel →](docs/guides/excel.md) — read the support note first |
 | Read or update records in a SharePoint list | [Lists →](docs/guides/lists.md) |
 | View Microsoft users and group members in SAP | [Users and groups →](docs/guides/users.md) |
+| Compare SAP accounts, roles and user details with Entra ID | [Three user checks →](docs/guides/users.md#4-compare-with-sap) |
 
 **Two important distinctions:** Teams notifications and Teams meetings follow different routes. **Files** is sufficient for transferring a whole `.xlsx` file; choose **Excel** to work with its cells.
+
+**For user checks:** choose [Active Directory or Entra ID](docs/guides/users.md#choose-the-directory) before installing. On-premises Active Directory uses the separate `abap-ldap-ad` tool; cloud Entra ID uses this project's Users module. You do not need both tools. The Graph comparisons only report differences.
 
 ## 2. The three parts of setup
 
@@ -59,5 +62,7 @@ File order and program types are listed in the [SAP file installation guide](doc
 The guide uses real A4H/001 and Microsoft 365 test screens. `Cheditte`, `SAP Test`, mailbox addresses and dates are **examples**; use your own environment's values. Program screens open in Turkish or English according to the SAP session language. Some Microsoft screens are also in Turkish; the English captions explain the relevant fields without altering the original evidence.
 
 The images combine earlier trials with new captures from 5 November 2026 in A4H/001 with 0.7.4 installed; some labels vary by version. Captions distinguish field-entry examples from executed results. ECC 6.0 runtime compatibility and a least-privilege configuration have not yet been verified. Current scope: [What has been verified?](VALIDATION.md#what-has-been-verified)
+
+The 0.8.0 user checks were tried on 6–7 November; the user guide explains them with an illustration. Its older SAP screenshots show user lookup, not the new comparison options. See [the recorded scope and telephone-test gap](docs/guides/users.md#5-what-was-tried).
 
 Start by [choosing your route](#1-what-would-you-like-to-do), then try it in a development or test system.

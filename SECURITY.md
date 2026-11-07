@@ -32,6 +32,12 @@ Every SAP user who can run a program or a job that includes these modules acts w
 
 The tests behind this project ran with broader permissions than these (see [VALIDATION.md](VALIDATION.md)); the restrictions above are Microsoft's documented setup and were not all tried here.
 
+## SAP user comparisons
+
+`ZCHE_GRAPH_USERS` reports account, group–role and user-detail differences. It does not lock users, assign roles or write to SAP or Entra ID. `S_USER_GRP` activity `03` limits the SAP users the caller can display; excluded users are counted. The role comparison also checks `S_USER_AGR` activity `03` for the selected role. A report with excluded users is not a complete review of the selection. Microsoft user/group read permissions still cover the tenant; SAP display restrictions do not reduce the application's Graph permissions.
+
+The separate on-premises Active Directory tool, `ZCHE_LDAP_AD`, has its own security model and a SAP locking option that requires confirmation. That option is not part of this Graph module.
+
 ## Türkçe
 
 Güvenlik açığını varsa **Security → Report a vulnerability** ile bildirin. Issue, ekran görüntüsü veya log paylaşırken client secret'ı, token'ı, Teams webhook adresini (`sig=` kısmı anahtardır) ve şirketinize ait tenant ID, adres, site ya da dosya bilgisini koymayın.
@@ -39,3 +45,7 @@ Güvenlik açığını varsa **Security → Report a vulnerability** ile bildiri
 Secret SM59'da durur; kod yalnız bağlantının adını bilir. Webhook adresi de SM59'dadır; bir yerde paylaşıldıysa Teams Workflows'ta akışı silip yeniden oluşturun ve yeni adresi SM59'a girin. Token yalnız program çalışırken bellekte tutulur.
 
 Uygulama izinleri kısıtlanmadıkça bütün tenant için geçerlidir: SharePoint için `Sites.Selected`, e-posta ve takvim için posta kutusu kısıtlaması kullanın. Programı çalıştıran her SAP kullanıcısı uygulamanın izinleriyle iş yapar; programları yetki grubu veya kendi yetki kontrolü olan bir işlem koduyla koruyun.
+
+`ZCHE_GRAPH_USERS` hesap, grup–rol ve kullanıcı bilgisi farklarını raporlar; kullanıcı kilitlemez, rol atamaz, SAP veya Entra ID'ye yazmaz. `S_USER_GRP` aktivite `03`, çağıranın görüntüleyebildiği SAP kullanıcılarını sınırlar; dışarıda kalanlar sayılır. Rol karşılaştırması seçilen rol için `S_USER_AGR` aktivite `03` kontrolünü de yapar. Dışarıda kalan kullanıcı varsa rapor seçim kapsamının tamamını incelemiş değildir. Microsoft kullanıcı/grup okuma izinleri yine tenant kapsamındadır; SAP görüntüleme sınırı uygulamanın Graph izinlerini daraltmaz.
+
+Ayrı şirket içi Active Directory aracı `ZCHE_LDAP_AD`, kendi güvenlik modeline ve onaylı SAP kilitleme seçeneğine sahiptir. Bu seçenek Graph modülünde bulunmaz.

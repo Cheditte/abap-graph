@@ -10,7 +10,7 @@ Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kala
 
 SAP ABAP Cloud Developer Trial 2025 sisteminde (SAP_BASIS 816).
 
-### Gerçek bir Microsoft 365 tenant'ında, 4 ve 5 Kasım 2026
+### Gerçek bir Microsoft 365 tenant'ında, 4–7 Kasım 2026
 
 Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM59'da; programlar seçim ekranlarından çalıştırıldı.
 
@@ -38,7 +38,7 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
 
 ![Test e-postası, SAP'den geri okunurken](docs/img/mail-read.png)
 
-- **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı, her paylaşılan kutuda olduğu gibi; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yok. Karşılaştırmanın kendisi yalnız birim testiyle sınandı.
+- **Kullanıcılar ve gruplar (5 Kasım):** `ZCHE_GRAPH_USERS` kullanıcıları listeledi; paylaşılan bir posta kutusunun kullanıcısını gösterdi (hesap kapalı; yönetici ve grup yok); bir Microsoft 365 grubunun üyelerini adıyla buldu. SAP hesap kontrolü kullanıcıları okudu ama hiçbirini karşılaştırmadı: o sırada deneme sistemindeki SAP kullanıcılarının SU01'de e-posta adresi yoktu. Karşılaştırma o tarihte yalnız birim testiyle sınanmıştı; aşağıdaki 6–7 Kasım kayıtları tenant karşılaştırmalarını ekler.
 - **Takvim (5 Kasım):** `ZCHE_GRAPH_CALENDAR` paylaşılan bir posta kutusunun takviminde 10:00–10:30 arası bir etkinlik oluşturdu (SAP saat dilimi `TURKEY`) ve aynı saatlerle geri listeledi. Aynı anahtarla tekrar çalıştırılınca aynı etkinlik döndü; takvimde yine tek etkinlik vardı.
 - **Teams toplantıları ve boş zaman (5 Kasım, 0.7.0):** lisanslı bir kullanıcının takviminde, katılımcısız, iki kez tekrarlanan haftalık bir Teams toplantısı: iki tekrar da katılma bağlantısıyla geri geldi, sonra seri silindi. Boş zaman araması iki posta kutusu için 09:00–09:30'u buldu; toplantının olduğu yarım saatte boş zaman bulmadı.
 - **Takvim yeniden, 0.7.2 (5 Kasım):** lisanslı bir kullanıcının takviminde, 15:00–15:30 `TURKEY`, iki kez tekrarlanan haftalık bir Teams toplantısı: SAP iki tekrarı da katılma bağlantısıyla listeledi; kullanıcının İstanbul'a ayarlı Outlook'u 15:00–15:30'u **Katıl** düğmesiyle gösterdi. Boş zaman araması 14:00–16:00 penceresinde 14:00–14:30'u buldu; sonra seri silindi ve o haftanın listesi boş döndü. Daha önce 14:00'e oluşturulan bir etkinlik, bir paylaşılan posta kutusunun Outlook'unda 11:00'de görünmüştü: o kutu UTC'ye ayarlıydı (bkz. [Outlook takvimi](TECHNICAL.tr.md#outlook-takvimi)).
@@ -48,7 +48,7 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
   - SAP hesap kontrolü bu kullanıcıyı karşılaştırdı ve *Microsoft hesabı kapalı* bulgusunu verdi.
   - `SAP Test` grubu (tek üye: tenant yöneticisi) ile `ZDEVELOPER` rolü karşılaştırması üç bulgu verdi: üyenin bu adresle bir SAP kullanıcısı yok; `BWDEVELOPER` rolde var ama grupta yok; `DEVELOPER` rolde var ama adresi olmadığı için karşılaştırılmadı.
   - SU01 ile Entra ID karşılaştırması bu kullanıcıyı karşılaştırdı ve önce fark bulmadı: posta kutusunun hesabında ad, soyad, departman ya da unvan yoktu; Entra ID'deki boş bir değer hiçbir zaman öneri olarak gösterilmiyor. Entra yönetim merkezinde ad `Test`, soyad `SAP` ve departman `IT` girildikten sonra aynı çalıştırma üç fark listeledi: ad `Doe` → `Test`, soyad `Jane` → `SAP`, departman boş → `IT` (SU01'deki adlar deneme sisteminin kendi verisi). Entra ID'de hâlâ boş olan unvan önerilmedi.
-- **Şirket içi AD aracıyla aynı kontroller (7 Kasım, 0.8.0):** geçici, kilitli bir SAP test kullanıcısına `SAP Test` grubundaki üyenin adresi girildi; tenant'ta hiçbir şey değiştirilmedi.
+- **Ayrı Active Directory aracından uyarlanan bazı kontroller (7 Kasım, 0.8.0, commit `e476476`):** geçici, kilitli bir SAP test kullanıcısına `SAP Test` grubundaki üyenin adresi girildi; tenant'ta hiçbir şey değiştirilmedi.
   - `SAP Test` grubu ile `ZDEVELOPER` rolü: üye artık *grupta, SAP kullanıcısı kilitli ya da geçersiz* olarak bildiriliyor. Diğer iki bulgu (`BWDEVELOPER`, `DEVELOPER`) 6 Kasım'daki gibi kaldı.
   - Bu kullanıcı ve `BWDEVELOPER` için "SAP'de kilitli, Entra'da açık" işaretli SAP hesap kontrolü: `BWDEVELOPER` için *Microsoft hesabı kapalı*, test kullanıcısı için *SAP'de kilitli ya da geçersiz, Microsoft hesabı açık*. Kutu işaretli değilken yalnız `BWDEVELOPER` bildirildi.
   - SU01 ile Entra ID karşılaştırması 6 Kasım'daki üç farkı aynen listeledi.
@@ -155,7 +155,7 @@ Tenant'ta bulunan ve 0.7.3'te düzeltilen:
 **Henüz doğrulanmadı:**
 - **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
-- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar, SU01 kontrolünde telefon farkı (yalnız birim testi: tenant'ta telefon değiştirilmedi, test verisine gerçek numara konmadı); katılımcılı etkinlikler ve cevapları, tüm gün etkinlikler, değiştirme ve iptal, aylık seri, yaz saati olan bir saat diliminde seri, şirket dışındaki kişilerin boş zamanı.
+- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** canlı şirket kullanıcılarının tümü üzerinde SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar, SU01 kontrolünde telefon farkı (yalnız birim testi: tenant'ta telefon değiştirilmedi, test verisine gerçek numara konmadı); katılımcılı etkinlikler ve cevapları, tüm gün etkinlikler, değiştirme ve iptal, aylık seri, yaz saati olan bir saat diliminde seri, şirket dışındaki kişilerin boş zamanı.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
 - **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.

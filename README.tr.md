@@ -4,7 +4,7 @@
 
 ![abap-graph: SAP ve Microsoft logolarıyla Microsoft 365 entegrasyonu; e-posta, dosya ve takvim simgeleri](docs/visuals/abap-graph-cover.png)
 
-**SAP’den Microsoft 365 ile e-posta, dosya ve takvim işlemleri.**
+**SAP’den Microsoft 365 işlemleri yapın; SAP kullanıcılarını Entra ID ile karşılaştırın.**
 
 Bu projeyi, SAP ile Microsoft 365 arasında çalışırken aynı bağlantı ve işlem kodlarını tekrar yazma ihtiyacını azaltmak için geliştirdim. Hazır programları ve gerekli dosyaları, kendi sisteminizde kullanıp uyarlayabilmeniz için bir araya getirdim.
 
@@ -26,9 +26,18 @@ Bu projeyi, SAP ile Microsoft 365 arasında çalışırken aynı bağlantı ve i
 | SharePoint / OneDrive’a dosya yüklemek veya dosya indirmek | [Dosyalar](docs/guides/files.tr.md) |
 | Var olan Excel dosyasının hücrelerini okumak veya değiştirmek | [Excel — destek sınırını okuyun](docs/guides/excel.tr.md) |
 | SharePoint listesindeki kayıtlarla çalışmak | [Listeler](docs/guides/lists.tr.md) |
-| Microsoft kullanıcılarını ve grup üyelerini listelemek | [Kullanıcılar ve gruplar](docs/guides/users.tr.md) |
+| Microsoft kullanıcılarını ve grup üyelerini listelemek | [Kullanıcılar ve gruplar](docs/guides/users.tr.md#ilk-liste) |
+| SAP hesaplarını, rollerini ve kullanıcı bilgilerini Entra ID ile karşılaştırmak | [Yalnız raporlayan üç kontrol](docs/guides/users.tr.md#4-sap-ile-karşılaştırma) |
 
-Kullanıcılarınız Microsoft 365 olmadan yalnız şirket içi Active Directory'de mi? [abap-ldap-ad](https://github.com/Cheditte/abap-ldap-ad), aynı SAP kullanıcı kontrollerini SAP'nin LDAP bağlayıcısıyla AD'ye karşı yapar.
+Graph karşılaştırmaları farkları gösterir; hesapları değiştirmez, rol atamaz.
+
+## Active Directory mi, Entra ID mi?
+
+![İki ayrı SAP kullanıcı kontrolü yolu: şirket içi Active Directory için LDAP üzerinden abap-ldap-ad; buluttaki Entra ID için Microsoft Graph üzerinden abap-graph.](docs/visuals/directory-routes-tr.jpg)
+
+**Şirket içi Active Directory:** ayrı `ZCHE_LDAP_AD` programını kullanın. **Buluttaki Microsoft Entra ID:** bu projedeki `ZCHE_GRAPH_USERS` programını kullanın. İkisi de SAP hesaplarını, grup–rol atamalarını ve iletişim bilgilerini gözden geçirmeye yardımcı olur. Örneğin dizindeki hesabı kapatılmış bir kişinin SAP kullanıcısı hâlâ açık olabilir.
+
+Dizininize uygun aracı seçin; bu, iki dizini birlikte eşitleyen bir hizmet değildir. Active Directory deposu şu anda özeldir. [İzlenecek yol ve erişim durumu →](docs/guides/users.tr.md#dizin-türünü-seçin)
 
 ## Başlamak için üç hazırlık
 

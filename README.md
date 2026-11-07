@@ -4,7 +4,7 @@
 
 ![abap-graph: SAP and Microsoft logos with Microsoft 365 integration; mail, file and calendar icons](docs/visuals/abap-graph-cover.png)
 
-**Work with Microsoft 365 mail, files and calendars from SAP.**
+**Work with Microsoft 365 from SAP and compare SAP users with Entra ID.**
 
 I developed this project to reduce repeated connection and operation code when working with Microsoft 365 from SAP. It brings together example programs and the files they need, so you can use and adapt them in your own system.
 
@@ -26,9 +26,18 @@ I developed this project to reduce repeated connection and operation code when w
 | Upload or download SharePoint / OneDrive files | [Files](docs/guides/files.md) |
 | Read or change cells in an existing Excel workbook | [Excel — read the support limitation](docs/guides/excel.md) |
 | Work with records in a SharePoint list | [Lists](docs/guides/lists.md) |
-| List Microsoft users and group members | [Users and groups](docs/guides/users.md) |
+| List Microsoft users and group members | [Users and groups](docs/guides/users.md#3-get-the-first-list) |
+| Check SAP accounts, roles and user details against Entra ID | [Three read-only comparisons](docs/guides/users.md#4-compare-with-sap) |
 
-Users only in an on-premises Active Directory, without Microsoft 365? [abap-ldap-ad](https://github.com/Cheditte/abap-ldap-ad) runs the same SAP user checks against AD through SAP's LDAP connector.
+The Graph comparisons show differences; they do not change accounts or assign roles.
+
+## Active Directory or Entra ID?
+
+![Two separate SAP user-check routes: on-premises Active Directory through LDAP with abap-ldap-ad; cloud Entra ID through Microsoft Graph with abap-graph.](docs/visuals/directory-routes-en.jpg)
+
+**On-premises Active Directory:** use the separate `ZCHE_LDAP_AD` program. **Cloud Microsoft Entra ID:** use `ZCHE_GRAPH_USERS` in this project. Both help review SAP accounts, group–role assignments and contact details. For example, a directory account may be disabled while its SAP user remains active.
+
+Choose the tool for your directory; this is not a combined synchronization service. The Active Directory repository is currently private. [Choose your route and check availability →](docs/guides/users.md#choose-the-directory)
 
 ## Three things to prepare
 

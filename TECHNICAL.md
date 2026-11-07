@@ -30,7 +30,7 @@ flowchart TB
 | [Files](#sharepoint-and-onedrive-files) | `ZCHE_GRAPH_FILES_LIB` | `ZCHE_GRAPH_FILES` | `Sites.Selected` | Put a delivery note into a document library |
 | [Excel](#excel-workbooks) | `ZCHE_GRAPH_FILES_LIB`, then `ZCHE_GRAPH_EXCEL_LIB` | `ZCHE_GRAPH_EXCEL` | See the [support limitation](#excel-workbooks) first | Try writing this month's figures into a planning workbook |
 | [Lists](#sharepoint-lists) | `ZCHE_GRAPH_LISTS_LIB` | `ZCHE_GRAPH_LISTS` | `Sites.Selected` | Keep a list of open orders up to date |
-| [Users and groups](#entra-id-users-and-groups) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | Find the SAP accounts of people who have left |
+| [Users and groups](#entra-id-users-and-groups) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | Review SAP accounts, roles and user details against Entra ID |
 | [Calendar and Teams meetings](#outlook-calendar) | `ZCHE_GRAPH_CALENDAR_LIB` | `ZCHE_GRAPH_CALENDAR` | `Calendars.ReadWrite` | Put a maintenance order into the team's calendar as a Teams meeting |
 | [Teams channel](#teams-channel-messages) | `ZCHE_GRAPH_TEAMS_LIB` | `ZCHE_GRAPH_TEAMS` | none: a Workflows webhook in SM59 | Tell a channel that a payment run stopped |
 
@@ -537,11 +537,11 @@ ENDTRY.
 Read the people of the company as Microsoft Entra ID knows them. Nothing is changed. Typical uses:
 - find the manager of a requester for an approval;
 - send a mail to the members of a group, for example "SAP approvers";
-- find SAP users who have left: their Microsoft account is disabled or gone, but the SAP user is still active;
-- keep an SAP role in line with a Microsoft group, for example the group "Finance team" and the role `Z_FI_CLERK`;
-- find where SU01 (name, department, job title) has fallen behind Microsoft Entra ID.
+- review active SAP users whose Microsoft account is disabled or missing; account status alone does not establish that a person has left;
+- identify differences between an SAP role and a Microsoft group, for example the group "Finance team" and the role `Z_FI_CLERK`;
+- compare SU01 name, department, job title and telephone with Microsoft Entra ID.
 
-The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USERS`) and the program `ZCHE_GRAPH_USERS`.
+The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USERS`) and the program `ZCHE_GRAPH_USERS`. Start with the [illustrated user guide](docs/guides/users.md). On-premises **Active Directory** has a separate implementation, `ZCHE_LDAP_AD`, through SAP's LDAP connector. Graph does not contain that LDAP connection or a combined SAP/AD/Entra comparison.
 
 - **A user** by user principal name, e-mail address or ID: name, job title, department, office, mobile and business phone, employee ID, company, and whether the account is enabled.
 - **Users by a filter**, for example `department eq 'Finance'`, `employeeId eq '00001234'` or `accountEnabled eq false`. Without a filter: all users.
@@ -553,17 +553,21 @@ The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USER
 
 The comparisons only report. Nothing is assigned, removed, locked or changed, in SAP or in Microsoft. When the caller may not display some SAP users (`S_USER_GRP`), the list says how many were left out.
 
+`P_REV` passes the optional `IV_REVERSE` flag to `COMPARE`; existing calls without it retain the normal direction. The extra finding is `locked_open`; a locked or invalid SAP match in `COMPARE_ROLE` is `sap_locked`. A restricted SAP selection or display authorization can leave a group member without a visible SAP match. Interpret results with the selection and excluded-user count.
+
+Telephone normalization is a simple last-ten-digit comparison, not international-number validation; country-code and extension differences need review. A live differing-telephone result has not been verified; see [validation](VALIDATION.md).
+
 ### What the users module needs in addition
 
 | What | Why | Who |
 |---|---|---|
 | Application permission **`User.Read.All`** with admin consent | Reading users, managers, direct reports | Microsoft 365 / Entra administrator |
 | Application permission **`GroupMember.Read.All`** with admin consent | Groups and their members | Microsoft 365 / Entra administrator |
-| For the SAP account check: read access to `USR02`, `USR21` and `ADR6`, and `S_USER_GRP` with activity 03 for the user groups | The program reads the user master directly; users of other groups are left out | SAP authorization administrator |
-| For the role check: `S_USER_AGR` with activity 03 for the role, read access to `AGR_USERS` | The program checks the role, then reads its users | SAP authorization administrator |
+| For SAP comparisons: `S_USER_GRP` with activity 03 for the user groups | The program reads `USR02`, `USR21` and `ADR6` and checks each SAP user's group; unauthorized users are left out and counted | SAP authorization administrator |
+| For the role check: `S_USER_AGR` with activity 03 for the role | The program checks the role, then reads assignments from `AGR_USERS`, including composite-role relationships | SAP authorization administrator |
 | For the SU01 check: `S_USER_GRP` with activity 03 for the user groups | Read through `BAPI_USER_GET_DETAIL`, which checks it; users it refuses are left out | SAP authorization administrator |
 
-These permissions cover every user and group of the company.
+The Microsoft application permissions cover the company's users and groups. SAP display permissions separately limit the SAP records included in the comparisons.
 
 ### Install
 
@@ -580,7 +584,7 @@ After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_USERS_LIB` (type **Include pro
 | **Group against SAP role** | Group name or ID, SAP role, "Include nested groups" if wanted; SAP users to limit the comparison |
 | **SU01 against Entra ID** | SAP users (empty: all dialog users) |
 
-The account check fits a monthly background job; its list goes to the spool. For the role check, save one variant per group and role.
+The account check fits a monthly background job; its list goes to the spool. For the role check, save one variant per group and role. **Filter** and **At most** apply to user search, not SAP comparisons; account and detail checks read the Entra directory for matching. Bulk group–role mappings, alternative matching keys, ALV output and last-sign-in reporting are not implemented.
 
 ### Use it in your own program
 

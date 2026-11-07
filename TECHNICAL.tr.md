@@ -30,7 +30,7 @@ flowchart TB
 | [Dosyalar](#sharepoint-ve-onedrive-dosyaları) | `ZCHE_GRAPH_FILES_LIB` | `ZCHE_GRAPH_FILES` | `Sites.Selected` | İrsaliyeyi bir doküman kitaplığına koymak |
 | [Excel](#excel-çalışma-kitapları) | önce `ZCHE_GRAPH_FILES_LIB`, sonra `ZCHE_GRAPH_EXCEL_LIB` | `ZCHE_GRAPH_EXCEL` | Önce [destek sınırını](docs/guides/excel.tr.md#başlamadan-önce) okuyun | Bu ayın rakamlarını bir planlama kitabına yazmayı denemek |
 | [Listeler](#sharepoint-listeleri) | `ZCHE_GRAPH_LISTS_LIB` | `ZCHE_GRAPH_LISTS` | `Sites.Selected` | Açık siparişler listesini güncel tutmak |
-| [Kullanıcılar ve gruplar](#entra-id-kullanıcıları-ve-grupları) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | Ayrılan çalışanların SAP hesaplarını bulmak |
+| [Kullanıcılar ve gruplar](#entra-id-kullanıcıları-ve-grupları) | `ZCHE_GRAPH_USERS_LIB` | `ZCHE_GRAPH_USERS` | `User.Read.All`, `GroupMember.Read.All` | SAP hesaplarını, rollerini ve kullanıcı bilgilerini Entra ID ile karşılaştırmak |
 | [Takvim ve Teams toplantıları](#outlook-takvimi) | `ZCHE_GRAPH_CALENDAR_LIB` | `ZCHE_GRAPH_CALENDAR` | `Calendars.ReadWrite` | Bakım siparişini ekibin takvimine Teams toplantısı olarak koymak |
 | [Teams kanalı](#teams-kanal-mesajları) | `ZCHE_GRAPH_TEAMS_LIB` | `ZCHE_GRAPH_TEAMS` | yok: SM59'da bir Workflows web kancası | Ödeme çalıştırmasının durduğunu kanala bildirmek |
 
@@ -567,11 +567,11 @@ ENDTRY.
 Şirketin çalışanlarını Microsoft Entra ID'de göründükleri gibi okur. Hiçbir şeyi değiştirmez. Tipik kullanımlar:
 - onay için talep sahibinin yöneticisini bulmak;
 - bir grubun üyelerine (örneğin "SAP onaycıları") e-posta göndermek;
-- ayrılan çalışanların SAP kullanıcılarını bulmak: Microsoft hesabı kapatılmış ya da silinmiş, ama SAP kullanıcısı hâlâ aktif;
-- bir SAP rolünü bir Microsoft grubuyla uyumlu tutmak, örneğin "Finans ekibi" grubu ile `Z_FI_CLERK` rolü;
-- SU01'deki ad, departman ve unvanın Microsoft Entra ID'nin gerisinde kaldığı yerleri bulmak.
+- Microsoft hesabı kapalı ya da bulunamayan aktif SAP kullanıcılarını incelemek; hesap durumu tek başına kişinin işten ayrıldığını göstermez;
+- bir SAP rolü ile Microsoft grubu arasındaki farkları görmek, örneğin "Finans ekibi" grubu ile `Z_FI_CLERK` rolü;
+- SU01'deki ad, departman, unvan ve telefonu Microsoft Entra ID ile karşılaştırmak.
 
-Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_GRAPH_USERS` programından oluşur.
+Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_GRAPH_USERS` programından oluşur. [Görselli kullanıcı rehberiyle](docs/guides/users.tr.md) başlayabilirsiniz. Şirket içi **Active Directory**, SAP'nin LDAP bağlayıcısı üzerinden çalışan ayrı `ZCHE_LDAP_AD` uygulamasını kullanır. Graph içinde bu LDAP bağlantısı veya birleşik SAP/AD/Entra karşılaştırması yoktur.
 
 - **Bir kullanıcı:** kullanıcı asıl adı (UPN), e-posta adresi ya da ID ile. Ad, unvan, departman, ofis, cep ve iş telefonu, personel no, şirket ve hesabın açık olup olmadığı gelir.
 - **Filtreyle kullanıcılar:** örneğin `department eq 'Finance'`, `employeeId eq '00001234'` ya da `accountEnabled eq false`. Filtre yoksa tüm kullanıcılar gelir.
@@ -583,17 +583,21 @@ Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_
 
 Karşılaştırmalar yalnız rapor verir. SAP'de ya da Microsoft'ta hiçbir şey atanmaz, silinmez, kilitlenmez, değiştirilmez. Çağıranın görüntüleyemediği SAP kullanıcıları olduğunda (`S_USER_GRP`) liste kaç kullanıcının dışarıda kaldığını yazar.
 
+`P_REV`, `COMPARE` metoduna isteğe bağlı `IV_REVERSE` değerini geçirir; bu parametreyi vermeyen eski çağrılar normal yönde çalışır. Ek bulgu `locked_open`, `COMPARE_ROLE` içindeki kilitli veya geçersiz SAP eşleşmesi ise `sap_locked` koduyla gösterilir. Dar bir SAP seçimi veya eksik görüntüleme yetkisi, grup üyesinin görünür SAP eşleşmesi olmamasına yol açabilir. Sonucu seçim kapsamı ve dışarıda kalan kullanıcı sayısıyla değerlendirin.
+
+Telefon normalleştirmesi yalnız son on rakamı karşılaştırır; uluslararası numara doğrulaması değildir. Ülke kodu ve dahili numara farklarını ayrıca inceleyin. Canlı ortamda farklı telefon sonucu henüz doğrulanmadı; [doğrulama kaydına](VALIDATION.tr.md) bakın.
+
 ### Kullanıcı modülünün ek gereksinimleri
 
 | Ne | Neden | Kim |
 |---|---|---|
 | Yönetici onaylı **`User.Read.All`** uygulama izni | Kullanıcıları, yöneticileri, bağlı çalışanları okumak | Microsoft 365 / Entra yöneticisi |
 | Yönetici onaylı **`GroupMember.Read.All`** uygulama izni | Gruplar ve üyeleri | Microsoft 365 / Entra yöneticisi |
-| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi ile kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Program kullanıcı ana verisini doğrudan okur; diğer grupların kullanıcıları listeye girmez | SAP yetki yöneticisi |
-| Rol kontrolü için rolde 03 aktiviteli `S_USER_AGR` ve `AGR_USERS` okuma yetkisi | Program önce rol yetkisini kontrol eder, sonra rolün kullanıcılarını okur | SAP yetki yöneticisi |
+| SAP karşılaştırmaları için kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Program `USR02`, `USR21` ve `ADR6` verilerini okur; her SAP kullanıcısının grubunu kontrol eder, yetkisiz olanları dışarıda bırakıp sayar | SAP yetki yöneticisi |
+| Rol kontrolü için rolde 03 aktiviteli `S_USER_AGR` | Program önce rol yetkisini kontrol eder; ardından bileşik rol ilişkileri dahil `AGR_USERS` atamalarını okur | SAP yetki yöneticisi |
 | SU01 kontrolü için kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Veriler bu yetkiyi kontrol eden `BAPI_USER_GET_DETAIL` ile okunur; reddedilen kullanıcılar listeye girmez | SAP yetki yöneticisi |
 
-Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
+Microsoft uygulama izinleri şirketin kullanıcılarını ve gruplarını kapsar. SAP görüntüleme yetkileri, karşılaştırmaya alınan SAP kayıtlarını ayrıca sınırlar.
 
 ### Kurulum
 
@@ -610,7 +614,7 @@ Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
 | **Grup ile SAP rolü** | Grup adı ya da ID, SAP rolü, istenirse "İç içe grupları da al"; karşılaştırmayı daraltmak için SAP kullanıcıları |
 | **SU01 ile Entra ID** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
 
-Hesap kontrolü aylık bir arka plan işine uygundur; listesi spool'a düşer. Rol kontrolü için her grup ve rol çifti ayrı bir varyant olarak kaydedilebilir.
+Hesap kontrolü aylık bir arka plan işine uygundur; listesi spool'a düşer. Rol kontrolü için her grup ve rol çifti ayrı bir varyant olarak kaydedilebilir. **Filtre** ve **En fazla** kullanıcı aramasına aittir, SAP karşılaştırmalarını sınırlamaz; hesap ve bilgi kontrolleri eşleştirme için Entra dizinini okur. Toplu grup–rol eşlemesi, alternatif eşleme anahtarları, ALV çıktısı ve son oturum açma raporu henüz yoktur.
 
 ### Kendi programınızda kullanmak
 

@@ -2,7 +2,7 @@
 
 [Proje](README.tr.md) · [Kaynak dosyalar](src) · [English](WALKTHROUGH.md) | **Türkçe**
 
-**abap-graph**, SAP’den Microsoft 365 hizmetlerine erişmek için hazırlanmış ABAP dosyalarını ve örnek programları bir araya getirir. E-posta, dosya aktarımı, takvim ve Teams bildirimi gibi işlemler ayrı bölümler halinde kullanılabilir.
+**abap-graph**, SAP’den Microsoft 365 hizmetlerine erişmek için hazırlanmış ABAP dosyalarını ve örnek programları bir araya getirir. E-posta, dosya aktarımı, takvim, Teams bildirimi ve Entra ID kullanıcı kontrolleri ayrı bölümler halinde kullanılabilir.
 
 Bu rehber, yapmak istediğiniz işlemden başlayarak gerekli hazırlıkları ve ilk kullanım adımlarını açıklar. Kaynak dosyalar [src klasöründedir](src); ekran görüntüleri test ortamındaki uygulamayı gösterir. **Yalnız ihtiyacınız olan bölümü kurabilirsiniz.** Örneğin Teams kanalına mesaj göndermek için e-posta veya Excel bölümünü kurmanız gerekmez.
 
@@ -12,7 +12,7 @@ Bu rehber, yapmak istediğiniz işlemden başlayarak gerekli hazırlıkları ve 
 
 Bağlantı ve veri alışverişi için ortak bir yardımcı dosya kullanılır. SAP’ye bu dosyayı bir kez, ardından seçtiğiniz işlemin dosyalarını eklersiniz. Teams **kanal bildirimi**, Teams’te oluşturulan bir İş Akışı bağlantısı üzerinden gönderilir.
 
-![Yedi kullanım amacı: Teams bildirimi, Teams toplantısı ve takvim, e-posta, dosyalar, Excel hücreleri, SharePoint listeleri, kullanıcılar. Yalnız ihtiyacınız olan yolu seçin.](docs/img/walkthrough/choose-your-route-tr.svg)
+![İşleminizi seçin: Teams bildirimi, takvim, e-posta, dosyalar, Excel hücreleri, listeler veya Entra ID kullanıcıları ve SAP kontrolleri.](docs/img/walkthrough/choose-your-route-tr.svg)
 
 ## 1. Ne yapmak istiyorsunuz?
 
@@ -27,8 +27,11 @@ Her bölüm kendi hazırlıklarını, gerekli dosyaları ve ilk denemeyi içerir
 | Var olan Excel dosyasının hücrelerini okumak veya değiştirmek | [Excel →](docs/guides/excel.tr.md) — önce destek notunu okuyun |
 | SharePoint listesindeki kayıtları okumak veya güncellemek | [Listeler →](docs/guides/lists.tr.md) |
 | Microsoft kullanıcılarını ve grup üyelerini SAP’de görmek | [Kullanıcılar ve gruplar →](docs/guides/users.tr.md) |
+| SAP hesaplarını, rollerini ve kullanıcı bilgilerini Entra ID ile karşılaştırmak | [Üç kullanıcı kontrolü →](docs/guides/users.tr.md#4-sap-ile-karşılaştırma) |
 
 **İki önemli ayrım:** Teams bildirimi ile Teams toplantısı farklı yollardır. Bir `.xlsx` dosyasını olduğu gibi taşımak için **Dosyalar** yeterlidir; içindeki hücrelerle çalışmak için **Excel** yolunu seçin.
+
+**Kullanıcı kontrolü için:** kurmadan önce [Active Directory veya Entra ID](docs/guides/users.tr.md#dizin-türünü-seçin) yolunu seçin. Şirket içi Active Directory ayrı `abap-ldap-ad` aracını, buluttaki Entra ID bu projenin Kullanıcılar modülünü kullanır. İkisini birden kurmanız gerekmez. Graph karşılaştırmaları yalnız farkları raporlar.
 
 ## 2. Kurulumun üç parçası
 
@@ -59,5 +62,7 @@ Dosya sırası ve türleri [SAP’ye dosya ekleme rehberinde](docs/guides/instal
 Rehberde gerçek A4H/001 ve Microsoft 365 test ekranları kullanılmıştır. `Cheditte`, `SAP Test`, posta adresleri ve tarihler **örnek değerlerdir**; kendi ortamınızın bilgilerini kullanın. Program ekranları SAP oturum diline göre Türkçe veya İngilizce açılır. Bazı Microsoft ekranları da Türkçedir; İngilizce rehberin görsel açıklamaları, özgün görüntüleri değiştirmeden ilgili alanları açıklar.
 
 Ekranlar önceki denemeleri ve 5 Kasım 2026’da 0.7.4 kurulu A4H/001 oturumunda alınan yeni görüntüleri birlikte içerir; bazı etiketler sürüme göre değişebilir. Alan doldurma örnekleri ile çalıştırılmış işlemlerin sonuçları görsel altında ayrı açıklanmıştır. ECC 6.0 üzerinde çalışma ve en az yetkili kurulum henüz doğrulanmış değildir. Güncel kapsam: [Neler doğrulandı?](VALIDATION.tr.md#neler-doğrulandı)
+
+0.8.0 kullanıcı kontrolleri 6–7 Kasım’da denendi; kullanıcı rehberinde bunları açıklayan bir çizim bulunur. Eski SAP görüntüleri yeni karşılaştırma seçeneklerini değil, kullanıcı aramasını gösterir. [Kaydedilen kapsam ve telefon denemesinin sınırı](docs/guides/users.tr.md#5-neler-denendi).
 
 Başlamak için [işleminize uygun bölümü seçin](#1-ne-yapmak-istiyorsunuz) ve ilk denemeyi geliştirme veya test sisteminizde uygulayın.

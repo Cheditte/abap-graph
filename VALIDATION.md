@@ -10,7 +10,7 @@ This page records earlier tests, fixes between versions and the remaining valida
 
 On an SAP ABAP Cloud Developer Trial 2025 (SAP_BASIS 816).
 
-### Against a real Microsoft 365 tenant, 4 and 5 November 2026
+### Against a real Microsoft 365 tenant, 4–7 November 2026
 
 A Microsoft 365 Business Basic test tenant, one app registration, the secret in SM59, the programs run from their selection screens.
 
@@ -38,7 +38,7 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
 
 ![The test mail, read back from SAP](docs/img/mail-read.png)
 
-- **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled, as for every shared mailbox; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial have no e-mail address in SU01. The comparison itself is covered only by a unit test.
+- **Users and groups (5 November):** `ZCHE_GRAPH_USERS` listed the users, showed a shared mailbox's user (account disabled; no manager, no groups) and the members of a Microsoft 365 group by its name. The SAP account check read the users, but compared none: the SAP users of the trial had no e-mail address in SU01. At that point, the comparison itself had only unit-test coverage; the 6–7 November records below add tenant comparisons.
 - **Calendar (5 November):** `ZCHE_GRAPH_CALENDAR` created an event from 10:00 to 10:30 (SAP time zone `TURKEY`) in a shared mailbox's calendar and listed it back with the same times. Run again with the same key, it got the same event back; the calendar still had one.
 - **Teams meetings and free time (5 November, 0.7.0):** in a licensed user's calendar, a weekly Teams meeting twice, without attendees: both occurrences came back with the join link, then the series was deleted. The free-time search found 09:00–09:30 for two mailboxes, and no time in the half hour of the meeting.
 - **Calendar again, 0.7.2 (5 November):** a weekly Teams meeting twice, 15:00–15:30 `TURKEY`, in a licensed user's calendar: SAP listed both occurrences with the join link, and the user's Outlook (set to Istanbul) showed 15:00–15:30 with a **Join** button. The free-time search found 14:00–14:30 in a window of 14:00–16:00; then the series was deleted and the list of that week was empty. An earlier event created for 14:00 had appeared at 11:00 in a shared mailbox's Outlook: that mailbox was set to UTC (see [Outlook calendar](TECHNICAL.md#outlook-calendar)).
@@ -48,7 +48,7 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
   - The SAP account check compared that one user and reported *Microsoft account disabled*.
   - The group `SAP Test` (one member, the tenant administrator) against role `ZDEVELOPER` gave three findings: the member has no SAP user with that address; `BWDEVELOPER` has the role but is not in the group; `DEVELOPER` has the role but no address, so it was not compared.
   - SU01 against Entra ID compared that one user and first found no difference: the mailbox's account had no first name, last name, department or job title, and an empty Entra ID value is never proposed. After first name `Test`, last name `SAP` and department `IT` were entered in the Entra admin center, the same run listed three differences: first name `Doe` → `Test`, last name `Jane` → `SAP`, department empty → `IT` (the SU01 names are those of the trial system). Job title, still empty in Entra ID, was not proposed.
-- **The same checks as the on-premises AD tool (7 November, 0.8.0):** a temporary SAP test user, locked, was given the address of the member of `SAP Test`; nothing was changed in the tenant.
+- **Selected checks adapted from the separate Active Directory tool (7 November, 0.8.0, commit `e476476`):** a temporary SAP test user, locked, was given the address of the member of `SAP Test`; nothing was changed in the tenant.
   - Group `SAP Test` against role `ZDEVELOPER`: the member is now reported as *in the group, the SAP user is locked or not valid*. The other two findings (`BWDEVELOPER`, `DEVELOPER`) stayed as on 6 November.
   - The SAP account check for that user and `BWDEVELOPER`, with "Locked in SAP, open in Entra": `BWDEVELOPER` *Microsoft account disabled*, and the test user *locked or not valid in SAP, Microsoft account enabled*. Without the box only `BWDEVELOPER` was reported.
   - SU01 against Entra ID listed the same three differences as on 6 November.
@@ -156,7 +156,7 @@ Found by a second code review and fixed in 0.7.4:
 
 - **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
-- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups, a telephone difference in the SU01 check (only unit tests: no telephone was changed in the tenant and no real number was put into test data); events with attendees and their answers, all-day events, changing and cancelling, monthly series, a series in a time zone with summer time, free time of people outside the company.
+- **Users and calendar against Microsoft:** SAP account checks across a production user population, managers and direct reports (none were set), nested groups, a telephone difference in the SU01 check (only unit tests: no telephone was changed in the tenant and no real number was put into test data); events with attendees and their answers, all-day events, changing and cancelling, monthly series, a series in a time zone with summer time, free time of people outside the company.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
 - **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.

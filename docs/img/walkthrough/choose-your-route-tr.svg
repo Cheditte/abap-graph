@@ -78,8 +78,8 @@
 <rect x="354" y="799" width="882" height="87" rx="5" fill="#302638"/>
 <rect x="383" y="822" width="16" height="16" rx="8" fill="#302638" stroke="#D4E86A"/>
 <polyline points="374,857 374,850 380,844 402,844 408,850 408,857" fill="none" stroke="#D4E86A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="433" y="834" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#F4F0E8">Kullanıcılar ve gruplar</text>
-<text x="433" y="868" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#BDB4C2">Hesapları ve grup üyelerini SAP’de görüntüleyin.</text>
+<text x="433" y="834" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" fill="#F4F0E8">Entra ID ve SAP kullanıcıları</text>
+<text x="433" y="868" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="400" fill="#BDB4C2">Hesap, rol ve kullanıcı bilgilerini karşılaştırın.</text>
 <rect x="1092" y="813" width="123" height="27" rx="4" fill="#40334A"/>
 <text x="1104" y="830" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#D4E86A">Graph</text>
 <polyline points="44,924 1236,924" fill="none" stroke="#605269" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>

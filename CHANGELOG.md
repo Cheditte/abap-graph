@@ -4,18 +4,19 @@ All versions are in `ZCHE_GRAPH_CORE` (`lif_graph=>version`) and in the header l
 
 ## 0.8.0 — unreleased
 
-Users and groups: two comparisons between Microsoft Entra ID and the SAP user master. Both only report. No new Microsoft permission is needed. Tried on SAP_BASIS 816 against the test tenant on 6 and 7 November (see [VALIDATION.md](VALIDATION.md)). abaplint (7.00) passed before the 7 November additions; they were not run through abaplint again.
+Users and groups: two new comparisons and an expanded account check between Microsoft Entra ID and the SAP user master. All three only report. No new Microsoft permission is needed. Tried on SAP_BASIS 816 against the test tenant on 6 and 7 November (see [VALIDATION.md](VALIDATION.md)). abaplint (7.00) passed before the 7 November additions; they were not run through abaplint again.
 
 - **Group against SAP role:** the members of a group against the users of an SAP role. Findings: in the group without the role, with the role outside the group, in the group without an SAP user, with the role but no address in SU01 (`LCL_GRAPH_USERS=>ROLE_USERS`, `COMPARE_ROLE`).
 - **SU01 against Entra ID:** first name, last name, department and job title (`SAP_DETAILS`, `COMPARE_DETAILS`). An empty value in Entra ID is never proposed for SAP.
 - Two unit tests for the comparisons.
 - **Security:** the SAP side of every comparison now leaves out users whose user group the caller may not display (`S_USER_GRP`, activity 03). Before, the account check read every dialog user without an authorization check. Found by a scan with `ZCHE_AUTH_EXPLORER`.
-- **The same checks as the on-premises Active Directory tool** (`ZCHE_LDAP_AD`, 7 November):
+- **Selected checks adapted from the on-premises Active Directory tool** (`ZCHE_LDAP_AD`, 7 November; separate implementations):
   - **Group against SAP role:** a member whose SAP user is locked or not valid today is reported as such (`sap_locked`). Before, it was reported as "no active SAP user has this address".
   - **SAP account check:** the new box "Locked in SAP, open in Entra" also lists the SAP users that are locked or not valid while an enabled Microsoft account has their address (`locked_open`). `COMPARE` has the optional `IV_REVERSE`; existing calls are unchanged.
   - **SU01 against Entra ID:** the telephone in SU01 is compared with the first business phone in Entra ID, by the last ten digits, so `+90 212 555 01 07` and `0212 555 0107` are the same line. An empty value in Entra ID is never proposed. "Show a user" shows the business phone.
   - The three SAP checks print how many SAP users were left out because the caller may not display them (`LCL_GRAPH_USERS=>SKIPPED`).
   - Two new unit tests and two extended; the 42 unit tests of `ZCHE_GRAPH_USERS` pass.
+- **Documentation:** English and Turkish user guides now explain all three comparisons, the reverse option, phone matching and excluded-user counts. Updated illustrations distinguish the separate Active Directory and Entra ID tools; README stays task-oriented. Existing SAP screenshots retain their original test scope.
 
 ## 0.7.4 — 2026-11-05
 
