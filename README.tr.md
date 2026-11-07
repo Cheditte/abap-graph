@@ -22,6 +22,8 @@ Bu projeyi, SAP ile Microsoft 365 arasında çalışırken aynı bağlantı ve i
 | SharePoint listesindeki kayıtlarla çalışmak | [Listeler](docs/guides/lists.tr.md) |
 | Microsoft kullanıcılarını ve grup üyelerini listelemek | [Kullanıcılar ve gruplar](docs/guides/users.tr.md) |
 
+Kullanıcılarınız Microsoft 365 olmadan yalnız şirket içi Active Directory'de mi? [abap-ldap-ad](https://github.com/Cheditte/abap-ldap-ad), aynı SAP kullanıcı kontrollerini SAP'nin LDAP bağlayıcısıyla AD'ye karşı yapar.
+
 ## Başlamak için üç hazırlık
 
 1. **İşleminizi seçin.** Kullanacağınız posta kutusunu, dosyayı, siteyi veya Teams kanalını belirleyin.

@@ -22,6 +22,8 @@ I developed this project to reduce repeated connection and operation code when w
 | Work with records in a SharePoint list | [Lists](docs/guides/lists.md) |
 | List Microsoft users and group members | [Users and groups](docs/guides/users.md) |
 
+Users only in an on-premises Active Directory, without Microsoft 365? [abap-ldap-ad](https://github.com/Cheditte/abap-ldap-ad) runs the same SAP user checks against AD through SAP's LDAP connector.
+
 ## Three things to prepare
 
 1. **Choose your task.** Identify the mailbox, file, site or Teams channel you want to use.

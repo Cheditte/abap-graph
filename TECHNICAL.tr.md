@@ -573,15 +573,15 @@ ENDTRY.
 
 Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_GRAPH_USERS` programından oluşur.
 
-- **Bir kullanıcı:** kullanıcı asıl adı (UPN), e-posta adresi ya da ID ile. Ad, unvan, departman, ofis, telefon, personel no, şirket ve hesabın açık olup olmadığı gelir.
+- **Bir kullanıcı:** kullanıcı asıl adı (UPN), e-posta adresi ya da ID ile. Ad, unvan, departman, ofis, cep ve iş telefonu, personel no, şirket ve hesabın açık olup olmadığı gelir.
 - **Filtreyle kullanıcılar:** örneğin `department eq 'Finance'`, `employeeId eq '00001234'` ya da `accountEnabled eq false`. Filtre yoksa tüm kullanıcılar gelir.
 - **Yönetici ve doğrudan bağlı çalışanlar.**
 - **Kullanıcının grupları** ve **bir grubun üyeleri** (adıyla ya da ID'siyle); istenirse iç içe gruplar dahil.
-- **SAP hesap kontrolü:** SU01'deki e-posta adresinin Microsoft hesabı olmayan ya da yalnız kapalı hesabı olan aktif SAP diyalog kullanıcıları (kilitli değil, bugün geçerli). Adres, büyük-küçük harfe bakılmadan e-posta ve UPN ile karşılaştırılır. SU01'de adresi olmayan kullanıcılar sayılır ama karşılaştırılmaz.
-- **Grup ile SAP rolü:** bir grubun üyeleri (istenirse iç içe gruplar dahil) ile bir rolü bugün taşıyan SAP kullanıcıları (bileşik rol üzerinden gelenler dahil) karşılaştırılır. Kişiler yukarıdaki gibi e-posta adresiyle eşleşir; yalnız açık Microsoft hesapları üye sayılır. Bulgular: grupta ama SAP kullanıcısında rol yok; rol var ama grupta değil; grupta ama bu adresle aktif SAP kullanıcısı yok; rol var ama SU01'de adresi yok. Yalnız aktif diyalog kullanıcıları karşılaştırılır.
-- **SU01 ile Entra ID:** adresi olan her aktif diyalog kullanıcısının adı, soyadı, departmanı ve unvanı. Boşluklar ve büyük-küçük harf dikkate alınmaz. Entra ID'de boş olan bir değer listelenmez; yani SAP'deki değerin silinmesi hiçbir zaman önerilmez. İki Microsoft hesabının paylaştığı bir adres atlanır.
+- **SAP hesap kontrolü:** SU01'deki e-posta adresinin Microsoft hesabı olmayan ya da yalnız kapalı hesabı olan aktif SAP diyalog kullanıcıları (kilitli değil, bugün geçerli). Adres, büyük-küçük harfe bakılmadan e-posta ve UPN ile karşılaştırılır. SU01'de adresi olmayan kullanıcılar sayılır ama karşılaştırılmaz. "SAP'de kilitli, Entra'da açık" işaretlenirse kontrol ters yönden de bakar: bugün kilitli ya da geçersiz olduğu hâlde adresinde açık bir Microsoft hesabı bulunan SAP kullanıcıları (örneğin yanlışlıkla kilitlenmiş bir kullanıcı ya da onunla birlikte kapatılması gereken bir hesap).
+- **Grup ile SAP rolü:** bir grubun üyeleri (istenirse iç içe gruplar dahil) ile bir rolü bugün taşıyan SAP kullanıcıları (bileşik rol üzerinden gelenler dahil) karşılaştırılır. Kişiler yukarıdaki gibi e-posta adresiyle eşleşir; yalnız açık Microsoft hesapları üye sayılır. Bulgular: grupta ama SAP kullanıcısında rol yok; rol var ama grupta değil; grupta ama bu adresteki SAP kullanıcısı kilitli ya da geçersiz; grupta ama bu adresle SAP kullanıcısı yok; rol var ama SU01'de adresi yok. Grupta olması gereken yalnız aktif diyalog kullanıcılarıdır.
+- **SU01 ile Entra ID:** adresi olan her aktif diyalog kullanıcısının adı, soyadı, departmanı, unvanı ve telefonu. Boşluklar ve büyük-küçük harf dikkate alınmaz. SU01'deki telefon, ilk iş telefonuyla son on rakamına göre karşılaştırılır; yani `+90 212 555 01 07` ile `0212 555 0107` aynı hat sayılır. Entra ID'de boş olan bir değer listelenmez; yani SAP'deki değerin silinmesi hiçbir zaman önerilmez. İki Microsoft hesabının paylaştığı bir adres atlanır.
 
-İki karşılaştırma da yalnız rapor verir. SAP'de ya da Microsoft'ta hiçbir şey atanmaz, silinmez, değiştirilmez.
+Karşılaştırmalar yalnız rapor verir. SAP'de ya da Microsoft'ta hiçbir şey atanmaz, silinmez, kilitlenmez, değiştirilmez. Çağıranın görüntüleyemediği SAP kullanıcıları olduğunda (`S_USER_GRP`) liste kaç kullanıcının dışarıda kaldığını yazar.
 
 ### Kullanıcı modülünün ek gereksinimleri
 
@@ -606,7 +606,7 @@ Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
 | **Kullanıcıyı göster** | Kullanıcı: adres, UPN ya da ID. Ayrıntıları, yöneticiyi, bağlı çalışanları ve grupları gösterir. |
 | **Kullanıcı ara** | Filtre (boş: tümü) ve en çok kaç kullanıcı |
 | **Grubun üyeleri** | Grup adı ya da ID; istenirse "İç içe grupları da al" |
-| **SAP kullanıcıları: hesap** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
+| **SAP kullanıcıları: hesap** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları); istenirse "SAP'de kilitli, Entra'da açık" |
 | **Grup ile SAP rolü** | Grup adı ya da ID, SAP rolü, istenirse "İç içe grupları da al"; karşılaştırmayı daraltmak için SAP kullanıcıları |
 | **SU01 ile Entra ID** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
 

@@ -4,7 +4,7 @@
 
 [English](VALIDATION.md) | **Türkçe**
 
-Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.8.0, henüz yayımlanmamış olarak kayıtlıdır; SAP ile karşılaştırmaları 6 Kasım'da tenant'ta denendi (aşağıya bakın).
+Bu sayfa önceki denemeleri, sürümler arasındaki düzeltmeleri ve açık kalan doğrulama alanlarını kaydeder. Her sonuç yanında belirtilen sürüm ve işlem için geçerlidir; belge düzenlemesi sırasında testler yeniden çalıştırılmadı. Yerel kaynak sürümü 0.8.0, henüz yayımlanmamış olarak kayıtlıdır; SAP ile karşılaştırmaları 6 ve 7 Kasım'da tenant'ta denendi (aşağıya bakın).
 
 ## Neler doğrulandı
 
@@ -48,6 +48,13 @@ Microsoft 365 Business Basic test tenant'ı, tek bir uygulama kaydı, secret SM5
   - SAP hesap kontrolü bu kullanıcıyı karşılaştırdı ve *Microsoft hesabı kapalı* bulgusunu verdi.
   - `SAP Test` grubu (tek üye: tenant yöneticisi) ile `ZDEVELOPER` rolü karşılaştırması üç bulgu verdi: üyenin bu adresle bir SAP kullanıcısı yok; `BWDEVELOPER` rolde var ama grupta yok; `DEVELOPER` rolde var ama adresi olmadığı için karşılaştırılmadı.
   - SU01 ile Entra ID karşılaştırması bu kullanıcıyı karşılaştırdı ve önce fark bulmadı: posta kutusunun hesabında ad, soyad, departman ya da unvan yoktu; Entra ID'deki boş bir değer hiçbir zaman öneri olarak gösterilmiyor. Entra yönetim merkezinde ad `Test`, soyad `SAP` ve departman `IT` girildikten sonra aynı çalıştırma üç fark listeledi: ad `Doe` → `Test`, soyad `Jane` → `SAP`, departman boş → `IT` (SU01'deki adlar deneme sisteminin kendi verisi). Entra ID'de hâlâ boş olan unvan önerilmedi.
+- **Şirket içi AD aracıyla aynı kontroller (7 Kasım, 0.8.0):** geçici, kilitli bir SAP test kullanıcısına `SAP Test` grubundaki üyenin adresi girildi; tenant'ta hiçbir şey değiştirilmedi.
+  - `SAP Test` grubu ile `ZDEVELOPER` rolü: üye artık *grupta, SAP kullanıcısı kilitli ya da geçersiz* olarak bildiriliyor. Diğer iki bulgu (`BWDEVELOPER`, `DEVELOPER`) 6 Kasım'daki gibi kaldı.
+  - Bu kullanıcı ve `BWDEVELOPER` için "SAP'de kilitli, Entra'da açık" işaretli SAP hesap kontrolü: `BWDEVELOPER` için *Microsoft hesabı kapalı*, test kullanıcısı için *SAP'de kilitli ya da geçersiz, Microsoft hesabı açık*. Kutu işaretli değilken yalnız `BWDEVELOPER` bildirildi.
+  - SU01 ile Entra ID karşılaştırması 6 Kasım'daki üç farkı aynen listeledi.
+  - "Kullanıcıyı göster" üyenin iş telefonunu Graph'tan okuyup gösterdi.
+  - `S_USER_GRP` yetkisi olmayan bir test kullanıcısıyla arka plan işinde çalıştırılan hesap kontrolü *Dışarıda bırakılan SAP kullanıcısı: görüntüleme yetkisi yok: 1* yazdı.
+  - Test kullanıcısı sonra silindi. `ZCHE_GRAPH_USERS`'ın 42 birim testi geçiyor.
 
 Tenant'ta bulunup 0.5.1'de düzeltilenler:
 
@@ -148,7 +155,7 @@ Tenant'ta bulunan ve 0.7.3'te düzeltilen:
 **Henüz doğrulanmadı:**
 - **E-postanın Microsoft'ta denenmesi:** HTML e-postalar, ekler (spool'dan olanlar dahil), büyük e-postalar, işaretleme ve taşıma. Posta kutusu sınırlaması (RBAC for Applications) kurulamadı: yeni tenant'ta Exchange Online, `Enable-OrganizationCustomization` adımında kendi iç hatasıyla durdu.
 - **Büyük eklerin Microsoft'a yüklenmesi:** yükleme adresinin host'u ve SICF proxy yolu.
-- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar; katılımcılı etkinlikler ve cevapları, tüm gün etkinlikler, değiştirme ve iptal, aylık seri, yaz saati olan bir saat diliminde seri, şirket dışındaki kişilerin boş zamanı.
+- **Kullanıcıların ve takvimin Microsoft'ta denenmesi:** gerçek adreslerle SAP hesap kontrolü, yönetici ve bağlı çalışanlar (tanımlı değildi), iç içe gruplar, SU01 kontrolünde telefon farkı (yalnız birim testi: tenant'ta telefon değiştirilmedi, test verisine gerçek numara konmadı); katılımcılı etkinlikler ve cevapları, tüm gün etkinlikler, değiştirme ve iptal, aylık seri, yaz saati olan bir saat diliminde seri, şirket dışındaki kişilerin boş zamanı.
 - **En az yetki:** modüllerin yalnız `Sites.Selected` ile çalışması ve yetki verilmemiş bir sitenin ya da OneDrive'ın reddedilmesi.
 - **SharePoint:** paylaşım bağlantıları, taşıma ve yeniden adlandırma, proxy üzerinden `*.sharepoint.com` yolu.
 - **Excel'in Microsoft'ta denenmesi:** kısa satırlar için `null`; metin biçiminde olmayan bir tablo sütununa satır eklerken kesme işareti (bir aralıkta ve zaten metin biçimli bir tablo sütununda denendi). Çok büyük bloklar Microsoft'un istek boyutu sınırlarına takılabilir.

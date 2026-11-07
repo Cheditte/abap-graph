@@ -4,7 +4,7 @@
 
 **English** | [Türkçe](VALIDATION.tr.md)
 
-This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.8.0, not yet released; its comparisons with SAP were tried on the tenant on 6 November (see below).
+This page records earlier tests, fixes between versions and the remaining validation gaps. Each result applies to the stated version and operation; tests were not rerun during this documentation update. The local source is recorded as version 0.8.0, not yet released; its comparisons with SAP were tried on the tenant on 6 and 7 November (see below).
 
 ## What has been verified
 
@@ -48,6 +48,13 @@ A Microsoft 365 Business Basic test tenant, one app registration, the secret in 
   - The SAP account check compared that one user and reported *Microsoft account disabled*.
   - The group `SAP Test` (one member, the tenant administrator) against role `ZDEVELOPER` gave three findings: the member has no SAP user with that address; `BWDEVELOPER` has the role but is not in the group; `DEVELOPER` has the role but no address, so it was not compared.
   - SU01 against Entra ID compared that one user and first found no difference: the mailbox's account had no first name, last name, department or job title, and an empty Entra ID value is never proposed. After first name `Test`, last name `SAP` and department `IT` were entered in the Entra admin center, the same run listed three differences: first name `Doe` → `Test`, last name `Jane` → `SAP`, department empty → `IT` (the SU01 names are those of the trial system). Job title, still empty in Entra ID, was not proposed.
+- **The same checks as the on-premises AD tool (7 November, 0.8.0):** a temporary SAP test user, locked, was given the address of the member of `SAP Test`; nothing was changed in the tenant.
+  - Group `SAP Test` against role `ZDEVELOPER`: the member is now reported as *in the group, the SAP user is locked or not valid*. The other two findings (`BWDEVELOPER`, `DEVELOPER`) stayed as on 6 November.
+  - The SAP account check for that user and `BWDEVELOPER`, with "Locked in SAP, open in Entra": `BWDEVELOPER` *Microsoft account disabled*, and the test user *locked or not valid in SAP, Microsoft account enabled*. Without the box only `BWDEVELOPER` was reported.
+  - SU01 against Entra ID listed the same three differences as on 6 November.
+  - "Show a user" showed the member's business phone, read from Graph.
+  - Run in a background job as a test user without `S_USER_GRP`, the account check said *SAP users left out: no authorization to display them: 1*.
+  - The test user was deleted afterwards. The 42 unit tests of `ZCHE_GRAPH_USERS` pass.
 
 Found on the tenant and fixed in 0.5.1:
 
@@ -149,7 +156,7 @@ Found by a second code review and fixed in 0.7.4:
 
 - **E-mail against Microsoft:** HTML mails, attachments (also from spool), large mails, marking and moving. The mailbox restriction (RBAC for Applications) could not be set up: on the new tenant Exchange Online stopped at `Enable-OrganizationCustomization` with an error of its own.
 - **Large attachments against Microsoft:** the upload URL host and the SICF proxy route.
-- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups; events with attendees and their answers, all-day events, changing and cancelling, monthly series, a series in a time zone with summer time, free time of people outside the company.
+- **Users and calendar against Microsoft:** the SAP account check with real addresses, managers and direct reports (none were set), nested groups, a telephone difference in the SU01 check (only unit tests: no telephone was changed in the tenant and no real number was put into test data); events with attendees and their answers, all-day events, changing and cancelling, monthly series, a series in a time zone with summer time, free time of people outside the company.
 - **Least privilege:** the modules with `Sites.Selected` alone, and the refusal of a site or a OneDrive that was not granted.
 - **SharePoint:** sharing links, moving and renaming, the route to `*.sharepoint.com` through a proxy.
 - **Excel against Microsoft:** `null` for short rows; the apostrophe when adding table rows to a column that is not formatted as text (it was tried on a range, and on a table column that was already text). Large blocks may hit Microsoft's request size limits.

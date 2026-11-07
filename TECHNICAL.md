@@ -543,15 +543,15 @@ Read the people of the company as Microsoft Entra ID knows them. Nothing is chan
 
 The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USERS`) and the program `ZCHE_GRAPH_USERS`.
 
-- **A user** by user principal name, e-mail address or ID: name, job title, department, office, phone, employee ID, company, and whether the account is enabled.
+- **A user** by user principal name, e-mail address or ID: name, job title, department, office, mobile and business phone, employee ID, company, and whether the account is enabled.
 - **Users by a filter**, for example `department eq 'Finance'`, `employeeId eq '00001234'` or `accountEnabled eq false`. Without a filter: all users.
 - **Manager and direct reports** of a user.
 - **Groups of a user**, and **members of a group** (by its name or ID), optionally through nested groups.
-- **SAP account check:** the active SAP dialog users (not locked, valid today) whose e-mail address in SU01 has no Microsoft account, or only a disabled one. The address is compared with the mail and the user principal name, without regard to case. Users without an address in SU01 are counted, not compared.
-- **Group against SAP role:** the members of a group (optionally through nested groups) and the SAP users that hold a role today, also through a composite role. People are matched by e-mail address as above; only enabled Microsoft accounts count as members. Findings: in the group but the SAP user lacks the role; has the role but is not in the group; in the group but no active SAP user has the address; has the role but no address in SU01. Only active dialog users are compared.
-- **SU01 against Entra ID:** first name, last name, department and job title of each active dialog user with an address. Blanks and case are ignored. A value that is empty in Entra ID is not listed, so SAP's value is never proposed to be cleared. An address shared by two Microsoft accounts is skipped.
+- **SAP account check:** the active SAP dialog users (not locked, valid today) whose e-mail address in SU01 has no Microsoft account, or only a disabled one. The address is compared with the mail and the user principal name, without regard to case. Users without an address in SU01 are counted, not compared. With "Locked in SAP, open in Entra" the check also asks the other way round: SAP users that are locked or not valid today while an enabled Microsoft account has their address (for example a user locked by mistake, or an account that should have been closed too).
+- **Group against SAP role:** the members of a group (optionally through nested groups) and the SAP users that hold a role today, also through a composite role. People are matched by e-mail address as above; only enabled Microsoft accounts count as members. Findings: in the group but the SAP user lacks the role; has the role but is not in the group; in the group but the SAP user with the address is locked or not valid; in the group but no SAP user has the address; has the role but no address in SU01. Only active dialog users need to be in the group.
+- **SU01 against Entra ID:** first name, last name, department, job title and telephone of each active dialog user with an address. Blanks and case are ignored. The telephone in SU01 is compared with the first business phone by its last ten digits, so `+90 212 555 01 07` and `0212 555 0107` are the same line. A value that is empty in Entra ID is not listed, so SAP's value is never proposed to be cleared. An address shared by two Microsoft accounts is skipped.
 
-Both comparisons only report. Nothing is assigned, removed or changed, in SAP or in Microsoft.
+The comparisons only report. Nothing is assigned, removed, locked or changed, in SAP or in Microsoft. When the caller may not display some SAP users (`S_USER_GRP`), the list says how many were left out.
 
 ### What the users module needs in addition
 
@@ -576,7 +576,7 @@ After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_USERS_LIB` (type **Include pro
 | **Show a user** | User: address, user principal name or ID. Shows the details, the manager, the direct reports and the groups. |
 | **Find users** | Filter (empty: all) and at most how many |
 | **Members of a group** | Group name or ID; "Include nested groups" if wanted |
-| **SAP users: account check** | SAP users (empty: all dialog users) |
+| **SAP users: account check** | SAP users (empty: all dialog users); "Locked in SAP, open in Entra" if wanted |
 | **Group against SAP role** | Group name or ID, SAP role, "Include nested groups" if wanted; SAP users to limit the comparison |
 | **SU01 against Entra ID** | SAP users (empty: all dialog users) |
 
