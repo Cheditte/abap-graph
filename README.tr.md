@@ -2,6 +2,8 @@
 
 > [English](README.md) | **Türkçe**
 
+![abap-graph: SAP ve Microsoft logolarıyla Microsoft 365 entegrasyonu; e-posta, dosya ve takvim simgeleri](docs/visuals/abap-graph-cover.png)
+
 **SAP’den Microsoft 365 ile e-posta, dosya ve takvim işlemleri.**
 
 Bu projeyi, SAP ile Microsoft 365 arasında çalışırken aynı bağlantı ve işlem kodlarını tekrar yazma ihtiyacını azaltmak için geliştirdim. Hazır programları ve gerekli dosyaları, kendi sisteminizde kullanıp uyarlayabilmeniz için bir araya getirdim.
@@ -11,6 +13,10 @@ Bu projeyi, SAP ile Microsoft 365 arasında çalışırken aynı bağlantı ve i
 **[Görselli kurulum ve kullanım yol haritası →](WALKTHROUGH.tr.md)**
 
 ## Ne yapmak istiyorsunuz?
+
+![SAP ve Microsoft logolarıyla kullanım alanları: Microsoft Graph üzerinden e-posta, takvim, dosyalar, listeler, kullanıcılar ve gruplar; Excel hücreleri deneysel. Teams bildirimleri ayrı Workflows bağlantısını kullanır.](docs/visuals/integration-map-tr.png)
+
+*Açıklayıcı çizimdir; test ekranı değildir. Teams bildirimleri ayrı Workflows yolunu kullanır. Excel hücre işlemlerinde [destek sınırını](docs/guides/excel.tr.md) okuyun.*
 
 | İhtiyacınız | Başlayacağınız bölüm |
 | --- | --- |

@@ -2,6 +2,8 @@
 
 > **English** | [Türkçe](README.tr.md)
 
+![abap-graph: SAP and Microsoft logos with Microsoft 365 integration; mail, file and calendar icons](docs/visuals/abap-graph-cover.png)
+
 **Work with Microsoft 365 mail, files and calendars from SAP.**
 
 I developed this project to reduce repeated connection and operation code when working with Microsoft 365 from SAP. It brings together example programs and the files they need, so you can use and adapt them in your own system.
@@ -11,6 +13,10 @@ I developed this project to reduce repeated connection and operation code when w
 **[Illustrated setup and first-use roadmap →](WALKTHROUGH.md)**
 
 ## What would you like to do?
+
+![SAP and Microsoft integration overview: Microsoft Graph for mail, calendar, files, lists, users and groups; Excel cells are experimental. Teams notifications use a separate Workflows connection.](docs/visuals/integration-map-en.png)
+
+*Explanatory illustration, not a test screen. Teams notifications use the separate Workflows route. Read the [support limitation](docs/guides/excel.md) for Excel cell operations.*
 
 | Your task | Where to start |
 | --- | --- |
