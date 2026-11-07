@@ -15,7 +15,10 @@
 *&   - users by an OData filter, for example department eq 'Finance'
 *&   - the manager and the direct reports of a user
 *&   - the groups of a user, the members of a group
-*&   - SAP users whose Microsoft account is disabled or missing
+*&   - SAP users whose Microsoft account is disabled or missing, and
+*&     SAP users locked in SAP whose Microsoft account is still enabled
+*&   - a group against the users of an SAP role
+*&   - name, department, job title and telephone in SU01 against Entra ID
 *&
 *& Application permissions (Microsoft Entra ID, with admin consent):
 *& User.Read.All, and GroupMember.Read.All for groups.
@@ -37,6 +40,8 @@ INTERFACE lif_graph_users.
       department          TYPE string,
       office_location     TYPE string,
       mobile_phone        TYPE string,
+      " The first of businessPhones
+      business_phone      TYPE string,
       employee_id         TYPE string,
       company_name        TYPE string,
       account_enabled     TYPE abap_bool,
@@ -60,7 +65,9 @@ INTERFACE lif_graph_users.
     END OF ty_sap_user,
     ty_sap_users TYPE STANDARD TABLE OF ty_sap_user WITH DEFAULT KEY.
 
-  " FINDING: missing (no Microsoft account with this address) or disabled
+  " FINDING: missing (no Microsoft account with this address), disabled, or
+  " locked_open (locked or not valid in SAP, Microsoft account enabled; only
+  " when asked for)
   TYPES:
     BEGIN OF ty_finding,
       bname        TYPE xubname,
@@ -75,8 +82,9 @@ INTERFACE lif_graph_users.
 
   " Group and role check. FINDING: no_role (in the group, the SAP user lacks
   " the role), extra_role (has the role, not in the group), no_sap_user (in
-  " the group, no active SAP user has the address), no_mail (has the role,
-  " no address in SU01, not compared)
+  " the group, no SAP user has the address), sap_locked (in the group, the
+  " SAP user with the address is locked or not valid), no_mail (has the
+  " role, no address in SU01, not compared)
   TYPES:
     BEGIN OF ty_role_finding,
       bname        TYPE xubname,
@@ -95,10 +103,11 @@ INTERFACE lif_graph_users.
       last_name  TYPE string,
       department TYPE string,
       job_title  TYPE string,
+      phone      TYPE string,
     END OF ty_sap_detail,
     ty_sap_details TYPE STANDARD TABLE OF ty_sap_detail WITH DEFAULT KEY.
 
-  " FIELD: first_name, last_name, department or job_title
+  " FIELD: first_name, last_name, department, job_title or phone
   TYPES:
     BEGIN OF ty_difference,
       bname       TYPE xubname,
@@ -117,7 +126,11 @@ ENDINTERFACE.
 CLASS lcl_graph_users DEFINITION FINAL.
   PUBLIC SECTION.
     "! The properties read for every user
-    CONSTANTS user_select TYPE string VALUE `id,userPrincipalName,displayName,givenName,surname,mail,jobTitle,department,officeLocation,mobilePhone,employeeId,companyName,accountEnabled`.
+    CONSTANTS user_select TYPE string VALUE `id,userPrincipalName,displayName,givenName,surname,mail,jobTitle,department,officeLocation,mobilePhone,employeeId,companyName,businessPhones,accountEnabled`.
+
+    "! SAP users the last SAP_USERS or SAP_DETAILS call left out because the
+    "! caller may not display them; the reports print the number
+    CLASS-DATA skipped TYPE i READ-ONLY.
 
     METHODS constructor
       IMPORTING
@@ -205,10 +218,13 @@ CLASS lcl_graph_users DEFINITION FINAL.
     "! Active SAP users whose address has no Microsoft account (missing) or
     "! a disabled one. The address is compared with mail and user principal
     "! name, without regard to case. SAP users without an address are skipped.
+    "! IV_REVERSE: also SAP users that are locked or not valid while an
+    "! enabled Microsoft account has their address (locked_open).
     CLASS-METHODS compare
       IMPORTING
         it_sap             TYPE lif_graph_users=>ty_sap_users
         it_entra           TYPE lif_graph_users=>ty_users
+        iv_reverse         TYPE abap_bool DEFAULT abap_false
       RETURNING
         value(rt_findings) TYPE lif_graph_users=>ty_findings.
 
@@ -222,7 +238,8 @@ CLASS lcl_graph_users DEFINITION FINAL.
 
     "! Group members against the users of an SAP role. People are matched by
     "! address (mail or user principal name, case ignored); only enabled
-    "! accounts count as members, only active SAP dialog users are compared.
+    "! accounts count as members. A member whose SAP user is locked or not
+    "! valid is reported as such; only active SAP users need the group.
     CLASS-METHODS compare_role
       IMPORTING
         it_members         TYPE lif_graph_users=>ty_users
@@ -231,7 +248,7 @@ CLASS lcl_graph_users DEFINITION FINAL.
       RETURNING
         value(rt_findings) TYPE lif_graph_users=>ty_role_findings.
 
-    "! Name, department and job title from SU01 for the active dialog users
+    "! Name, department, job title and telephone from SU01 for the active dialog users
     "! with an address. Read with BAPI_USER_GET_DETAIL, so its authority
     "! check applies; users it refuses are left out.
     CLASS-METHODS sap_details
@@ -241,7 +258,9 @@ CLASS lcl_graph_users DEFINITION FINAL.
         value(rt_details) TYPE lif_graph_users=>ty_sap_details.
 
     "! Fields where SU01 differs from Microsoft Entra ID. Blanks and case are
-    "! ignored; an empty value in Entra ID is never proposed for SAP.
+    "! ignored; an empty value in Entra ID is never proposed for SAP. The SU01
+    "! telephone is compared with the first business phone by its last ten
+    "! digits, so 0212 555 0107 equals +90 (212) 555 01 07.
     CLASS-METHODS compare_details
       IMPORTING
         it_sap                TYPE lif_graph_users=>ty_sap_details
@@ -255,6 +274,13 @@ CLASS lcl_graph_users DEFINITION FINAL.
     CLASS-METHODS address_key
       IMPORTING
         iv_address    TYPE string
+      RETURNING
+        value(rv_key) TYPE string.
+
+    "! The last ten digits of a telephone number
+    CLASS-METHODS phone_key
+      IMPORTING
+        iv_phone      TYPE string
       RETURNING
         value(rv_key) TYPE string.
 
@@ -372,6 +398,8 @@ CLASS lcl_graph_users IMPLEMENTATION.
     rs_user-office_location = io_json->get( lv_field ).
     CONCATENATE iv_prefix `mobilePhone` INTO lv_field.
     rs_user-mobile_phone = io_json->get( lv_field ).
+    CONCATENATE iv_prefix `businessPhones/0` INTO lv_field.
+    rs_user-business_phone = io_json->get( lv_field ).
     CONCATENATE iv_prefix `employeeId` INTO lv_field.
     rs_user-employee_id = io_json->get( lv_field ).
     CONCATENATE iv_prefix `companyName` INTO lv_field.
@@ -655,12 +683,14 @@ CLASS lcl_graph_users IMPLEMENTATION.
     " The standard address first when a user has several
     SORT lt_rows BY bname ASCENDING flgdefault DESCENDING.
     DELETE ADJACENT DUPLICATES FROM lt_rows COMPARING bname.
+    skipped = 0.
     LOOP AT lt_rows INTO ls_row.
       " Only users the caller may display in SU01 (user group, activity 03)
       AUTHORITY-CHECK OBJECT 'S_USER_GRP'
         ID 'CLASS' FIELD ls_row-class
         ID 'ACTVT' FIELD '03'.
       IF sy-subrc <> 0.
+        skipped = skipped + 1.
         CONTINUE.
       ENDIF.
       CLEAR ls_user.
@@ -734,6 +764,26 @@ CLASS lcl_graph_users IMPLEMENTATION.
         APPEND ls_finding TO rt_findings.
       ENDIF.
     ENDLOOP.
+
+    IF iv_reverse = abap_false.
+      RETURN.
+    ENDIF.
+    " Locked or not valid in SAP, but the Microsoft account is still enabled
+    LOOP AT it_sap INTO ls_sap WHERE active = abap_false.
+      lv_mail = address_key( ls_sap-mail ).
+      IF lv_mail IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      LOOP AT lt_addresses INTO ls_address WHERE address = lv_mail AND enabled = abap_true.
+        CLEAR ls_finding.
+        ls_finding-bname = ls_sap-bname.
+        ls_finding-mail = lv_mail.
+        ls_finding-display_name = ls_address-name.
+        ls_finding-finding = `locked_open`.
+        APPEND ls_finding TO rt_findings.
+        EXIT.
+      ENDLOOP.
+    ENDLOOP.
   ENDMETHOD.
 
 
@@ -741,6 +791,30 @@ CLASS lcl_graph_users IMPLEMENTATION.
     rv_key = iv_address.
     CONDENSE rv_key NO-GAPS.
     TRANSLATE rv_key TO LOWER CASE.
+  ENDMETHOD.
+
+
+  METHOD phone_key.
+    DATA lv_text TYPE string.
+    DATA lv_char TYPE c LENGTH 1.
+    DATA lv_length TYPE i.
+    DATA lv_offset TYPE i.
+
+    lv_text = iv_phone.
+    lv_length = strlen( lv_text ).
+    DO lv_length TIMES.
+      lv_offset = sy-index - 1.
+      lv_char = lv_text+lv_offset(1).
+      IF lv_char CA '0123456789'.
+        CONCATENATE rv_key lv_char INTO rv_key.
+      ENDIF.
+    ENDDO.
+    " +90 212 555 01 07 and 0212 555 0107 are the same line
+    lv_length = strlen( rv_key ).
+    IF lv_length > 10.
+      lv_offset = lv_length - 10.
+      rv_key = rv_key+lv_offset(10).
+    ENDIF.
   ENDMETHOD.
 
 
@@ -770,6 +844,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
       BEGIN OF lty_sap,
         address TYPE string,
         bname   TYPE xubname,
+        active  TYPE abap_bool,
       END OF lty_sap.
     DATA lt_sap_by_address TYPE SORTED TABLE OF lty_sap WITH NON-UNIQUE KEY address.
     DATA ls_sap_address TYPE lty_sap.
@@ -786,12 +861,14 @@ CLASS lcl_graph_users IMPLEMENTATION.
     LOOP AT it_role INTO lv_bname.
       INSERT lv_bname INTO TABLE lt_role.
     ENDLOOP.
-    LOOP AT it_sap INTO ls_sap WHERE active = abap_true.
+    " Locked SAP users too, so that their member is not reported as having none
+    LOOP AT it_sap INTO ls_sap.
       ls_sap_address-address = address_key( ls_sap-mail ).
       IF ls_sap_address-address IS INITIAL.
         CONTINUE.
       ENDIF.
       ls_sap_address-bname = ls_sap-bname.
+      ls_sap_address-active = ls_sap-active.
       INSERT ls_sap_address INTO TABLE lt_sap_by_address.
     ENDLOOP.
 
@@ -815,14 +892,20 @@ CLASS lcl_graph_users IMPLEMENTATION.
       LOOP AT lt_sap_by_address INTO ls_sap_address
            WHERE address = lv_mail OR address = lv_upn.
         lv_found = abap_true.
+        ls_finding-bname = ls_sap_address-bname.
+        IF ls_sap_address-active = abap_false.
+          ls_finding-finding = `sap_locked`.
+          APPEND ls_finding TO rt_findings.
+          CONTINUE.
+        ENDIF.
         READ TABLE lt_role TRANSPORTING NO FIELDS WITH TABLE KEY table_line = ls_sap_address-bname.
         IF sy-subrc <> 0.
-          ls_finding-bname = ls_sap_address-bname.
           ls_finding-finding = `no_role`.
           APPEND ls_finding TO rt_findings.
         ENDIF.
       ENDLOOP.
       IF lv_found = abap_false.
+        CLEAR ls_finding-bname.
         ls_finding-finding = `no_sap_user`.
         APPEND ls_finding TO rt_findings.
       ENDIF.
@@ -860,8 +943,10 @@ CLASS lcl_graph_users IMPLEMENTATION.
     DATA lt_return TYPE STANDARD TABLE OF bapiret2 WITH DEFAULT KEY.
     DATA ls_return TYPE bapiret2.
     DATA lv_failed TYPE abap_bool.
+    DATA lv_skipped TYPE i.
 
     lt_users = sap_users( it_bname ).
+    lv_skipped = skipped.
     LOOP AT lt_users INTO ls_user WHERE active = abap_true AND mail IS NOT INITIAL.
       CLEAR: ls_address, lt_return, lv_failed.
       CALL FUNCTION 'BAPI_USER_GET_DETAIL'
@@ -876,6 +961,7 @@ CLASS lcl_graph_users IMPLEMENTATION.
         EXIT.
       ENDLOOP.
       IF lv_failed = abap_true.
+        lv_skipped = lv_skipped + 1.
         CONTINUE.
       ENDIF.
       CLEAR ls_detail.
@@ -885,8 +971,10 @@ CLASS lcl_graph_users IMPLEMENTATION.
       ls_detail-last_name = ls_address-lastname.
       ls_detail-department = ls_address-department.
       ls_detail-job_title = ls_address-function.
+      ls_detail-phone = ls_address-tel1_numbr.
       APPEND ls_detail TO rt_details.
     ENDLOOP.
+    skipped = lv_skipped.
   ENDMETHOD.
 
 
@@ -969,6 +1057,11 @@ CLASS lcl_graph_users IMPLEMENTATION.
       add_difference( EXPORTING is_sap = ls_sap iv_field = `job_title`
                                 iv_sap = ls_sap-job_title iv_entra = ls_entra-job_title
                       CHANGING  ct_differences = rt_differences ).
+      IF phone_key( ls_sap-phone ) <> phone_key( ls_entra-business_phone ).
+        add_difference( EXPORTING is_sap = ls_sap iv_field = `phone`
+                                  iv_sap = ls_sap-phone iv_entra = ls_entra-business_phone
+                        CHANGING  ct_differences = rt_differences ).
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -999,6 +1092,8 @@ CLASS ltc_graph_users DEFINITION FINAL FOR TESTING.
     METHODS compare_sap FOR TESTING.
     METHODS compare_group_and_role FOR TESTING.
     METHODS compare_su01_details FOR TESTING.
+    METHODS compare_sap_reverse FOR TESTING.
+    METHODS compare_su01_phone FOR TESTING.
 
     METHODS request_at
       IMPORTING
@@ -1042,12 +1137,14 @@ CLASS ltc_graph_users IMPLEMENTATION.
     DATA lv_json TYPE string.
 
     CONCATENATE `{"id":"U1","userPrincipalName":"derya@contoso.com","displayName":"Derya Kaya",`
-                `"department":"Muhasebe","employeeId":"00001234","accountEnabled":false}` INTO lv_json.
+                `"department":"Muhasebe","employeeId":"00001234","businessPhones":["+90 212 555 0101"],`
+                `"accountEnabled":false}` INTO lv_json.
     mo_http->answer( iv_status = 200 iv_body = lv_json ).
     ls_user = mo_cut->user( ` derya@contoso.com ` ).
     cl_aunit_assert=>assert_equals( act = ls_user-id exp = `U1` ).
     cl_aunit_assert=>assert_equals( act = ls_user-department exp = `Muhasebe` ).
     cl_aunit_assert=>assert_equals( act = ls_user-employee_id exp = `00001234` ).
+    cl_aunit_assert=>assert_equals( act = ls_user-business_phone exp = `+90 212 555 0101` ).
     cl_aunit_assert=>assert_equals( act = ls_user-account_enabled exp = abap_false ).
     ls_request = request_at( 2 ).
     cl_aunit_assert=>assert_char_cp( act = ls_request-uri exp = '/v1.0/users/derya*contoso.com?$select=id,userPrincipalName,*accountEnabled' ).
@@ -1231,6 +1328,12 @@ CLASS ltc_graph_users IMPLEMENTATION.
     ls_member-mail = `eski@contoso.com`.
     ls_member-account_enabled = abap_false.
     APPEND ls_member TO lt_members.
+    " Kilit: a member whose SAP user is locked
+    CLEAR ls_member.
+    ls_member-mail = `locked@contoso.com`.
+    ls_member-display_name = `Kilit Test`.
+    ls_member-account_enabled = abap_true.
+    APPEND ls_member TO lt_members.
 
     ls_sap-active = abap_true.
     ls_sap-bname = 'DKAYA'.
@@ -1258,7 +1361,10 @@ CLASS ltc_graph_users IMPLEMENTATION.
 
     lt_findings = lcl_graph_users=>compare_role( it_members = lt_members it_sap = lt_sap it_role = lt_role ).
     lv_count = lines( lt_findings ).
-    cl_aunit_assert=>assert_equals( act = lv_count exp = 4 ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 5 ).
+    READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'LOCKED'.
+    cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `sap_locked` ).
+    cl_aunit_assert=>assert_equals( act = ls_finding-display_name exp = `Kilit Test` ).
     READ TABLE lt_findings INTO ls_finding WITH KEY bname = 'AYILMAZ'.
     cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `no_role` ).
     cl_aunit_assert=>assert_equals( act = ls_finding-display_name exp = `Ayşe Yılmaz` ).
@@ -1317,6 +1423,96 @@ CLASS ltc_graph_users IMPLEMENTATION.
     cl_aunit_assert=>assert_equals( act = ls_difference-field exp = `department` ).
     cl_aunit_assert=>assert_equals( act = ls_difference-sap_value exp = `Muhasebe` ).
     cl_aunit_assert=>assert_equals( act = ls_difference-entra_value exp = `Finans` ).
+  ENDMETHOD.
+
+
+  METHOD compare_sap_reverse.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_users.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_user.
+    DATA lt_entra TYPE lif_graph_users=>ty_users.
+    DATA ls_entra TYPE lif_graph_users=>ty_user.
+    DATA lt_findings TYPE lif_graph_users=>ty_findings.
+    DATA ls_finding TYPE lif_graph_users=>ty_finding.
+    DATA lv_count TYPE i.
+
+    ls_entra-mail = `old@contoso.com`.
+    ls_entra-display_name = `Eski Çalışan`.
+    ls_entra-account_enabled = abap_true.
+    APPEND ls_entra TO lt_entra.
+    CLEAR ls_entra.
+    ls_entra-mail = `gone@contoso.com`.
+    ls_entra-account_enabled = abap_false.
+    APPEND ls_entra TO lt_entra.
+
+    " Locked in SAP, enabled in Entra ID: reported
+    ls_sap-bname = 'OLD'.
+    ls_sap-mail = `Old@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+    " Locked in SAP, disabled in Entra ID, or no account: nothing to do
+    ls_sap-bname = 'GONE'.
+    ls_sap-mail = `gone@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+    ls_sap-bname = 'NONE'.
+    ls_sap-mail = `none@contoso.com`.
+    APPEND ls_sap TO lt_sap.
+
+    " Not asked for: no finding
+    lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra ).
+    lv_count = lines( lt_findings ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 0 ).
+
+    lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra iv_reverse = abap_true ).
+    lv_count = lines( lt_findings ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+    READ TABLE lt_findings INDEX 1 INTO ls_finding.
+    cl_aunit_assert=>assert_equals( act = ls_finding-bname exp = 'OLD' ).
+    cl_aunit_assert=>assert_equals( act = ls_finding-finding exp = `locked_open` ).
+    cl_aunit_assert=>assert_equals( act = ls_finding-display_name exp = `Eski Çalışan` ).
+  ENDMETHOD.
+
+
+  METHOD compare_su01_phone.
+    DATA lt_sap TYPE lif_graph_users=>ty_sap_details.
+    DATA ls_sap TYPE lif_graph_users=>ty_sap_detail.
+    DATA lt_entra TYPE lif_graph_users=>ty_users.
+    DATA ls_entra TYPE lif_graph_users=>ty_user.
+    DATA lt_differences TYPE lif_graph_users=>ty_differences.
+    DATA ls_difference TYPE lif_graph_users=>ty_difference.
+    DATA lv_count TYPE i.
+
+    ls_entra-mail = `derya@contoso.com`.
+    ls_entra-business_phone = `+90 (212) 555 01 07`.
+    APPEND ls_entra TO lt_entra.
+    ls_entra-mail = `can@contoso.com`.
+    ls_entra-business_phone = `+90 212 555 0199`.
+    APPEND ls_entra TO lt_entra.
+    ls_entra-mail = `bos@contoso.com`.
+    CLEAR ls_entra-business_phone.
+    APPEND ls_entra TO lt_entra.
+
+    " The same line written differently: no difference
+    ls_sap-bname = 'DKAYA'.
+    ls_sap-mail = `derya@contoso.com`.
+    ls_sap-phone = `0212 555 0107`.
+    APPEND ls_sap TO lt_sap.
+    " Another number: a difference
+    ls_sap-bname = 'CDEMIR'.
+    ls_sap-mail = `can@contoso.com`.
+    ls_sap-phone = `0212 555 0100`.
+    APPEND ls_sap TO lt_sap.
+    " Empty in Entra ID: never proposed
+    ls_sap-bname = 'BOS'.
+    ls_sap-mail = `bos@contoso.com`.
+    ls_sap-phone = `0212 555 0101`.
+    APPEND ls_sap TO lt_sap.
+
+    lt_differences = lcl_graph_users=>compare_details( it_sap = lt_sap it_entra = lt_entra ).
+    lv_count = lines( lt_differences ).
+    cl_aunit_assert=>assert_equals( act = lv_count exp = 1 ).
+    READ TABLE lt_differences INDEX 1 INTO ls_difference.
+    cl_aunit_assert=>assert_equals( act = ls_difference-bname exp = 'CDEMIR' ).
+    cl_aunit_assert=>assert_equals( act = ls_difference-field exp = `phone` ).
+    cl_aunit_assert=>assert_equals( act = ls_difference-entra_value exp = `+90 212 555 0199` ).
   ENDMETHOD.
 
 ENDCLASS.

@@ -13,9 +13,11 @@
 *&   - find users with an OData filter
 *&   - show the members of a group
 *&   - list the active SAP dialog users whose e-mail address (SU01) has
-*&     no Microsoft account, or a disabled one
+*&     no Microsoft account, or a disabled one; optionally also the users
+*&     locked in SAP whose Microsoft account is still enabled
 *&   - compare a Microsoft group with the users of an SAP role
-*&   - compare name, department and job title in SU01 with Entra ID
+*&   - compare name, department, job title and telephone in SU01 with
+*&     Entra ID
 *& Nothing is changed, neither in SAP nor in Microsoft Entra ID.
 *& Your own programs call LCL_GRAPH_USERS directly; see the README.
 *&---------------------------------------------------------------------*
@@ -49,6 +51,7 @@ PARAMETERS p_filter TYPE c LENGTH 255 LOWER CASE.
 PARAMETERS p_group TYPE c LENGTH 120 LOWER CASE.
 PARAMETERS p_role TYPE agr_name.
 PARAMETERS p_nested AS CHECKBOX.
+PARAMETERS p_rev AS CHECKBOX.
 PARAMETERS p_max TYPE i DEFAULT 100.
 SELECT-OPTIONS s_user FOR gv_bname.
 SELECTION-SCREEN END OF BLOCK b_what.
@@ -121,6 +124,7 @@ CLASS lcl_text IMPLEMENTATION.
     add( EXPORTING iv_name = 'P_GROUP' iv_en = 'Group (name or ID)' iv_tr = 'Grup (ad ya da ID)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_ROLE' iv_en = 'SAP role' iv_tr = 'SAP rolü' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_NESTED' iv_en = 'Include nested groups' iv_tr = 'İç içe grupları da al' CHANGING ct_texts = lt_texts ).
+    add( EXPORTING iv_name = 'P_REV' iv_en = 'Locked in SAP, open in Entra' iv_tr = 'SAP''de kilitli, Entra''da açık' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'P_MAX' iv_en = 'At most (users)' iv_tr = 'En çok (kullanıcı)' CHANGING ct_texts = lt_texts ).
     add( EXPORTING iv_name = 'S_USER' iv_en = 'SAP users' iv_tr = 'SAP kullanıcıları' iv_kind = 'S' CHANGING ct_texts = lt_texts ).
 
@@ -205,6 +209,8 @@ CLASS lcl_app DEFINITION FINAL.
         iv_en    TYPE csequence
         iv_tr    TYPE csequence
         iv_count TYPE i OPTIONAL.
+
+    CLASS-METHODS skipped_users.
 ENDCLASS.
 
 
@@ -259,6 +265,17 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD skipped_users.
+    DATA lv_count TYPE i.
+    " Users the caller may not display are left out; say how many
+    lv_count = lcl_graph_users=>skipped.
+    IF lv_count > 0.
+      heading( iv_en = `SAP users left out: no authorization to display them`
+               iv_tr = `Dışarıda bırakılan SAP kullanıcısı: görüntüleme yetkisi yok` iv_count = lv_count ).
+    ENDIF.
+  ENDMETHOD.
+
+
   METHOD show_users.
     DATA ls_user TYPE lif_graph_users=>ty_user.
     DATA lv_text TYPE string.
@@ -295,6 +312,7 @@ CLASS lcl_app IMPLEMENTATION.
     field_line( iv_en = `Job title` iv_tr = `Unvan` iv_value = ls_user-job_title ).
     field_line( iv_en = `Department` iv_tr = `Departman` iv_value = ls_user-department ).
     field_line( iv_en = `Office` iv_tr = `Ofis` iv_value = ls_user-office_location ).
+    field_line( iv_en = `Business phone` iv_tr = `İş telefonu` iv_value = ls_user-business_phone ).
     field_line( iv_en = `Mobile phone` iv_tr = `Cep telefonu` iv_value = ls_user-mobile_phone ).
     field_line( iv_en = `Employee ID` iv_tr = `Personel no` iv_value = ls_user-employee_id ).
     field_line( iv_en = `Company` iv_tr = `Şirket` iv_value = ls_user-company_name ).
@@ -340,8 +358,10 @@ CLASS lcl_app IMPLEMENTATION.
     DATA lv_count TYPE i.
     DATA lv_compared TYPE i.
     DATA lv_no_mail TYPE i.
+    DATA lv_skipped TYPE i.
 
     lt_sap = lcl_graph_users=>sap_users( s_user[] ).
+    lv_skipped = lcl_graph_users=>skipped.
     LOOP AT lt_sap INTO ls_sap WHERE active = abap_true.
       IF ls_sap-mail IS INITIAL.
         lv_no_mail = lv_no_mail + 1.
@@ -350,21 +370,29 @@ CLASS lcl_app IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
     lt_entra = all_users( io_users ).
-    lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra ).
+    lt_findings = lcl_graph_users=>compare( it_sap = lt_sap it_entra = lt_entra iv_reverse = p_rev ).
 
     lv_count = lines( lt_entra ).
     heading( iv_en = `Microsoft Entra ID users read` iv_tr = `Okunan Microsoft Entra ID kullanıcısı` iv_count = lv_count ).
     heading( iv_en = `Active SAP dialog users compared` iv_tr = `Karşılaştırılan aktif SAP diyalog kullanıcısı` iv_count = lv_compared ).
     heading( iv_en = `Active SAP dialog users without an e-mail address (not compared)`
              iv_tr = `E-posta adresi olmayan aktif SAP diyalog kullanıcısı (karşılaştırılmadı)` iv_count = lv_no_mail ).
+    IF lv_skipped > 0.
+      heading( iv_en = `SAP users left out: no authorization to display them`
+               iv_tr = `Dışarıda bırakılan SAP kullanıcısı: görüntüleme yetkisi yok` iv_count = lv_skipped ).
+    ENDIF.
     lv_count = lines( lt_findings ).
     heading( iv_en = `Findings` iv_tr = `Bulgular` iv_count = lv_count ).
     LOOP AT lt_findings INTO ls_finding.
-      IF ls_finding-finding = `missing`.
-        lv_text = lcl_text=>get( iv_en = `no Microsoft account` iv_tr = `Microsoft hesabı yok` ).
-      ELSE.
-        lv_text = lcl_text=>get( iv_en = `Microsoft account disabled` iv_tr = `Microsoft hesabı kapalı` ).
-      ENDIF.
+      CASE ls_finding-finding.
+        WHEN `missing`.
+          lv_text = lcl_text=>get( iv_en = `no Microsoft account` iv_tr = `Microsoft hesabı yok` ).
+        WHEN `locked_open`.
+          lv_text = lcl_text=>get( iv_en = `locked or not valid in SAP, Microsoft account enabled`
+                                   iv_tr = `SAP'de kilitli ya da geçersiz, Microsoft hesabı açık` ).
+        WHEN OTHERS.
+          lv_text = lcl_text=>get( iv_en = `Microsoft account disabled` iv_tr = `Microsoft hesabı kapalı` ).
+      ENDCASE.
       lv_bname = ls_finding-bname.
       CONCATENATE lv_bname ls_finding-mail lv_text ls_finding-display_name INTO lv_text SEPARATED BY ` | `.
       WRITE: / lv_text.
@@ -423,6 +451,7 @@ CLASS lcl_app IMPLEMENTATION.
     heading( iv_en = `Group members read` iv_tr = `Okunan grup üyesi` iv_count = lv_count ).
     lv_count = lines( lt_role ).
     heading( iv_en = `SAP users with the role today` iv_tr = `Bugün rolü olan SAP kullanıcısı` iv_count = lv_count ).
+    skipped_users( ).
     lv_count = lines( lt_findings ).
     heading( iv_en = `Findings` iv_tr = `Bulgular` iv_count = lv_count ).
     LOOP AT lt_findings INTO ls_finding.
@@ -432,8 +461,11 @@ CLASS lcl_app IMPLEMENTATION.
         WHEN `extra_role`.
           lv_text = lcl_text=>get( iv_en = `has the SAP role, not in the group` iv_tr = `SAP rolü var, grupta değil` ).
         WHEN `no_sap_user`.
-          lv_text = lcl_text=>get( iv_en = `in the group, no active SAP user has this address`
-                                   iv_tr = `grupta, bu adresle aktif SAP kullanıcısı yok` ).
+          lv_text = lcl_text=>get( iv_en = `in the group, no SAP user has this address`
+                                   iv_tr = `grupta, bu adresle SAP kullanıcısı yok` ).
+        WHEN `sap_locked`.
+          lv_text = lcl_text=>get( iv_en = `in the group, the SAP user is locked or not valid`
+                                   iv_tr = `grupta, SAP kullanıcısı kilitli ya da geçersiz` ).
         WHEN OTHERS.
           lv_text = lcl_text=>get( iv_en = `has the SAP role, no e-mail address in SU01 (not compared)`
                                    iv_tr = `SAP rolü var, SU01'de e-posta adresi yok (karşılaştırılmadı)` ).
@@ -462,6 +494,7 @@ CLASS lcl_app IMPLEMENTATION.
     lv_count = lines( lt_sap ).
     heading( iv_en = `Active SAP dialog users with an address compared`
              iv_tr = `Karşılaştırılan adresli aktif SAP diyalog kullanıcısı` iv_count = lv_count ).
+    skipped_users( ).
     lv_count = lines( lt_differences ).
     heading( iv_en = `Differences (SU01 -> Entra ID)` iv_tr = `Farklar (SU01 -> Entra ID)` iv_count = lv_count ).
     LOOP AT lt_differences INTO ls_difference.
@@ -472,6 +505,8 @@ CLASS lcl_app IMPLEMENTATION.
           lv_field = lcl_text=>get( iv_en = `Last name` iv_tr = `Soyad` ).
         WHEN `department`.
           lv_field = lcl_text=>get( iv_en = `Department` iv_tr = `Departman` ).
+        WHEN `phone`.
+          lv_field = lcl_text=>get( iv_en = `Telephone` iv_tr = `Telefon` ).
         WHEN OTHERS.
           lv_field = lcl_text=>get( iv_en = `Job title` iv_tr = `Unvan` ).
       ENDCASE.

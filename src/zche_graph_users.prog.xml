@@ -53,6 +53,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_REV</KEY>
+     <ENTRY>Locked in SAP, open in Entra</ENTRY>
+     <LENGTH>36</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_TENANT</KEY>
      <ENTRY>Tenant ID or domain</ENTRY>
      <LENGTH>27</LENGTH>
