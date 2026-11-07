@@ -567,7 +567,9 @@ ENDTRY.
 Şirketin çalışanlarını Microsoft Entra ID'de göründükleri gibi okur. Hiçbir şeyi değiştirmez. Tipik kullanımlar:
 - onay için talep sahibinin yöneticisini bulmak;
 - bir grubun üyelerine (örneğin "SAP onaycıları") e-posta göndermek;
-- ayrılan çalışanların SAP kullanıcılarını bulmak: Microsoft hesabı kapatılmış ya da silinmiş, ama SAP kullanıcısı hâlâ aktif.
+- ayrılan çalışanların SAP kullanıcılarını bulmak: Microsoft hesabı kapatılmış ya da silinmiş, ama SAP kullanıcısı hâlâ aktif;
+- bir SAP rolünü bir Microsoft grubuyla uyumlu tutmak, örneğin "Finans ekibi" grubu ile `Z_FI_CLERK` rolü;
+- SU01'deki ad, departman ve unvanın Microsoft Entra ID'nin gerisinde kaldığı yerleri bulmak.
 
 Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_GRAPH_USERS` programından oluşur.
 
@@ -576,6 +578,10 @@ Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_
 - **Yönetici ve doğrudan bağlı çalışanlar.**
 - **Kullanıcının grupları** ve **bir grubun üyeleri** (adıyla ya da ID'siyle); istenirse iç içe gruplar dahil.
 - **SAP hesap kontrolü:** SU01'deki e-posta adresinin Microsoft hesabı olmayan ya da yalnız kapalı hesabı olan aktif SAP diyalog kullanıcıları (kilitli değil, bugün geçerli). Adres, büyük-küçük harfe bakılmadan e-posta ve UPN ile karşılaştırılır. SU01'de adresi olmayan kullanıcılar sayılır ama karşılaştırılmaz.
+- **Grup ile SAP rolü:** bir grubun üyeleri (istenirse iç içe gruplar dahil) ile bir rolü bugün taşıyan SAP kullanıcıları (bileşik rol üzerinden gelenler dahil) karşılaştırılır. Kişiler yukarıdaki gibi e-posta adresiyle eşleşir; yalnız açık Microsoft hesapları üye sayılır. Bulgular: grupta ama SAP kullanıcısında rol yok; rol var ama grupta değil; grupta ama bu adresle aktif SAP kullanıcısı yok; rol var ama SU01'de adresi yok. Yalnız aktif diyalog kullanıcıları karşılaştırılır.
+- **SU01 ile Entra ID:** adresi olan her aktif diyalog kullanıcısının adı, soyadı, departmanı ve unvanı. Boşluklar ve büyük-küçük harf dikkate alınmaz. Entra ID'de boş olan bir değer listelenmez; yani SAP'deki değerin silinmesi hiçbir zaman önerilmez. İki Microsoft hesabının paylaştığı bir adres atlanır.
+
+İki karşılaştırma da yalnız rapor verir. SAP'de ya da Microsoft'ta hiçbir şey atanmaz, silinmez, değiştirilmez.
 
 ### Kullanıcı modülünün ek gereksinimleri
 
@@ -583,7 +589,9 @@ Modül, `ZCHE_GRAPH_USERS_LIB` include'u (`LCL_GRAPH_USERS` sınıfı) ve `ZCHE_
 |---|---|---|
 | Yönetici onaylı **`User.Read.All`** uygulama izni | Kullanıcıları, yöneticileri, bağlı çalışanları okumak | Microsoft 365 / Entra yöneticisi |
 | Yönetici onaylı **`GroupMember.Read.All`** uygulama izni | Gruplar ve üyeleri | Microsoft 365 / Entra yöneticisi |
-| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi | Program kullanıcı ana verisini doğrudan okur | SAP yetki yöneticisi |
+| SAP hesap kontrolü için `USR02`, `USR21` ve `ADR6` okuma yetkisi ile kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Program kullanıcı ana verisini doğrudan okur; diğer grupların kullanıcıları listeye girmez | SAP yetki yöneticisi |
+| Rol kontrolü için rolde 03 aktiviteli `S_USER_AGR` ve `AGR_USERS` okuma yetkisi | Program önce rol yetkisini kontrol eder, sonra rolün kullanıcılarını okur | SAP yetki yöneticisi |
+| SU01 kontrolü için kullanıcı gruplarında 03 aktiviteli `S_USER_GRP` | Veriler bu yetkiyi kontrol eden `BAPI_USER_GET_DETAIL` ile okunur; reddedilen kullanıcılar listeye girmez | SAP yetki yöneticisi |
 
 Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
 
@@ -599,8 +607,10 @@ Bu izinler şirketin bütün kullanıcılarını ve gruplarını kapsar.
 | **Kullanıcı ara** | Filtre (boş: tümü) ve en çok kaç kullanıcı |
 | **Grubun üyeleri** | Grup adı ya da ID; istenirse "İç içe grupları da al" |
 | **SAP kullanıcıları: hesap** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
+| **Grup ile SAP rolü** | Grup adı ya da ID, SAP rolü, istenirse "İç içe grupları da al"; karşılaştırmayı daraltmak için SAP kullanıcıları |
+| **SU01 ile Entra ID** | SAP kullanıcıları (boş: tüm diyalog kullanıcıları) |
 
-Hesap kontrolü aylık bir arka plan işine uygundur; listesi spool'a düşer.
+Hesap kontrolü aylık bir arka plan işine uygundur; listesi spool'a düşer. Rol kontrolü için her grup ve rol çifti ayrı bir varyant olarak kaydedilebilir.
 
 ### Kendi programınızda kullanmak
 

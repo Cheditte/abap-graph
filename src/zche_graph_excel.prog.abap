@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_EXCEL: Excel workbooks in SharePoint or OneDrive through
 *& Microsoft Graph
-*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.8.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: the includes ZCHE_GRAPH_CORE, ZCHE_GRAPH_FILES_LIB and

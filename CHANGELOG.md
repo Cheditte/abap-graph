@@ -2,6 +2,15 @@
 
 All versions are in `ZCHE_GRAPH_CORE` (`lif_graph=>version`) and in the header line of every source. Update every include and program together. What was tried against a real tenant is in [VALIDATION.md](VALIDATION.md).
 
+## 0.8.0 — unreleased
+
+Users and groups: two comparisons between Microsoft Entra ID and the SAP user master. Both only report. No new Microsoft permission is needed. Not yet tried in SAP or against the tenant; abaplint (7.00) passes.
+
+- **Group against SAP role:** the members of a group against the users of an SAP role. Findings: in the group without the role, with the role outside the group, in the group without an SAP user, with the role but no address in SU01 (`LCL_GRAPH_USERS=>ROLE_USERS`, `COMPARE_ROLE`).
+- **SU01 against Entra ID:** first name, last name, department and job title (`SAP_DETAILS`, `COMPARE_DETAILS`). An empty value in Entra ID is never proposed for SAP.
+- Two unit tests for the comparisons.
+- **Security:** the SAP side of every comparison now leaves out users whose user group the caller may not display (`S_USER_GRP`, activity 03). Before, the account check read every dialog user without an authorization check. Found by a scan with `ZCHE_AUTH_EXPLORER`.
+
 ## 0.7.4 — 2026-11-05
 
 Fixes from a second, independent code review. 105 unit tests pass on SAP_BASIS 816; not tried again on the tenant.

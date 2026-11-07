@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
 *& ZCHE_GRAPH_CALENDAR_LIB: Outlook calendar through Microsoft Graph
 *& (INCLUDE)
-*& abap-graph 0.7.4, https://github.com/Cheditte/abap-graph
+*& abap-graph 0.8.0, https://github.com/Cheditte/abap-graph
 *& MIT License, Copyright (c) 2026 Ali Emre Altuntas
 *&---------------------------------------------------------------------*
 *& Install: SE38, create program ZCHE_GRAPH_CALENDAR_LIB with type

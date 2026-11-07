@@ -43,4 +43,16 @@ Grup üyeleri için **Members of a group / Grubun üyeleri** seçip kendi grubun
 
 </details>
 
-Liste geldiğinde adları ve hesap adreslerini kontrol etmek bu ilk deneme için yeterli. SAP hesaplarıyla karşılaştırma ayrı bir seçenektir ve ek SAP okuma yetkileri ister. [Ayrıntılar](../../TECHNICAL.tr.md#entra-id-kullanıcıları-ve-grupları)
+Liste geldiğinde adları ve hesap adreslerini kontrol etmek bu ilk deneme için yeterli.
+
+## 4. SAP ile karşılaştırma (isteğe bağlı)
+
+Üç seçenek Microsoft'u SAP kullanıcılarıyla karşılaştırır. Yalnız rapor verirler; hiçbir şey değiştirilmez.
+
+- **SAP kullanıcıları: hesap**: Microsoft hesabı kapalı ya da hiç olmayan aktif SAP kullanıcıları.
+- **Grup ile SAP rolü**: bir grup ve bir SAP rolü girin. Liste, grupta olup rolü olmayanları ve rolü olup grupta olmayanları gösterir.
+- **SU01 ile Entra ID**: SU01 ile Microsoft arasında farklı olan ad, departman ve unvan.
+
+Kişiler SU01'deki e-posta adresiyle eşleşir. Karşılaştırmalar ek SAP okuma yetkileri ister. [Ayrıntılar](../../TECHNICAL.tr.md#entra-id-kullanıcıları-ve-grupları)
+
+Rol ve SU01 seçenekleri 0.8.0'da eklendi ve henüz SAP'de denenmedi.

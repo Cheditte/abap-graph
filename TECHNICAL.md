@@ -537,7 +537,9 @@ ENDTRY.
 Read the people of the company as Microsoft Entra ID knows them. Nothing is changed. Typical uses:
 - find the manager of a requester for an approval;
 - send a mail to the members of a group, for example "SAP approvers";
-- find SAP users who have left: their Microsoft account is disabled or gone, but the SAP user is still active.
+- find SAP users who have left: their Microsoft account is disabled or gone, but the SAP user is still active;
+- keep an SAP role in line with a Microsoft group, for example the group "Finance team" and the role `Z_FI_CLERK`;
+- find where SU01 (name, department, job title) has fallen behind Microsoft Entra ID.
 
 The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USERS`) and the program `ZCHE_GRAPH_USERS`.
 
@@ -546,6 +548,10 @@ The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USER
 - **Manager and direct reports** of a user.
 - **Groups of a user**, and **members of a group** (by its name or ID), optionally through nested groups.
 - **SAP account check:** the active SAP dialog users (not locked, valid today) whose e-mail address in SU01 has no Microsoft account, or only a disabled one. The address is compared with the mail and the user principal name, without regard to case. Users without an address in SU01 are counted, not compared.
+- **Group against SAP role:** the members of a group (optionally through nested groups) and the SAP users that hold a role today, also through a composite role. People are matched by e-mail address as above; only enabled Microsoft accounts count as members. Findings: in the group but the SAP user lacks the role; has the role but is not in the group; in the group but no active SAP user has the address; has the role but no address in SU01. Only active dialog users are compared.
+- **SU01 against Entra ID:** first name, last name, department and job title of each active dialog user with an address. Blanks and case are ignored. A value that is empty in Entra ID is not listed, so SAP's value is never proposed to be cleared. An address shared by two Microsoft accounts is skipped.
+
+Both comparisons only report. Nothing is assigned, removed or changed, in SAP or in Microsoft.
 
 ### What the users module needs in addition
 
@@ -553,7 +559,9 @@ The module consists of the include `ZCHE_GRAPH_USERS_LIB` (class `LCL_GRAPH_USER
 |---|---|---|
 | Application permission **`User.Read.All`** with admin consent | Reading users, managers, direct reports | Microsoft 365 / Entra administrator |
 | Application permission **`GroupMember.Read.All`** with admin consent | Groups and their members | Microsoft 365 / Entra administrator |
-| For the SAP account check: read access to `USR02`, `USR21` and `ADR6` | The program reads the user master directly | SAP authorization administrator |
+| For the SAP account check: read access to `USR02`, `USR21` and `ADR6`, and `S_USER_GRP` with activity 03 for the user groups | The program reads the user master directly; users of other groups are left out | SAP authorization administrator |
+| For the role check: `S_USER_AGR` with activity 03 for the role, read access to `AGR_USERS` | The program checks the role, then reads its users | SAP authorization administrator |
+| For the SU01 check: `S_USER_GRP` with activity 03 for the user groups | Read through `BAPI_USER_GET_DETAIL`, which checks it; users it refuses are left out | SAP authorization administrator |
 
 These permissions cover every user and group of the company.
 
@@ -569,8 +577,10 @@ After `ZCHE_GRAPH_CORE`: **SE38** → `ZCHE_GRAPH_USERS_LIB` (type **Include pro
 | **Find users** | Filter (empty: all) and at most how many |
 | **Members of a group** | Group name or ID; "Include nested groups" if wanted |
 | **SAP users: account check** | SAP users (empty: all dialog users) |
+| **Group against SAP role** | Group name or ID, SAP role, "Include nested groups" if wanted; SAP users to limit the comparison |
+| **SU01 against Entra ID** | SAP users (empty: all dialog users) |
 
-The account check fits a monthly background job; its list goes to the spool.
+The account check fits a monthly background job; its list goes to the spool. For the role check, save one variant per group and role.
 
 ### Use it in your own program
 

@@ -40,7 +40,7 @@ Microsoft Graph, programların Microsoft 365 hizmetlerine erişmesini sağlayan 
 
 | Konu | Durum |
 | --- | --- |
-| Kaynak sürümü | 0.7.4; henüz yayımlanmamış geliştirme sürümü |
+| Kaynak sürümü | 0.8.0; henüz yayımlanmamış geliştirme sürümü |
 | Denenen ortam | A4H/001, SAP_BASIS 816 ve Microsoft 365 test ortamı; kapsam sürüm ve işleme göre değişir |
 | Eski SAP sistemleri | Klasik ABAP 7.00 sözdizimi hedeflenir; ECC 6.0’da henüz denenmedi |
 | Excel hücre işlemleri | Kullanılan giriş yöntemi için Microsoft’un destek sınırlaması var; hazır `.xlsx` dosyalarını taşımak için Dosyalar bölümünü kullanabilirsiniz |

@@ -43,4 +43,16 @@ For group members, select **Members of a group** and enter your group's name or 
 
 </details>
 
-Checking names and account addresses is enough for this first trial. Comparison with SAP accounts is a separate option requiring additional SAP read authorizations. [Details](../../TECHNICAL.md#entra-id-users-and-groups)
+Checking names and account addresses is enough for this first trial.
+
+## 4. Compare with SAP (optional)
+
+Three options compare Microsoft with the SAP users. They only report; nothing is changed.
+
+- **SAP users: account check**: active SAP users whose Microsoft account is disabled or missing.
+- **Group against SAP role**: enter a group and an SAP role. The list shows who is in the group but lacks the role, and who has the role but is not in the group.
+- **SU01 against Entra ID**: name, department and job title that differ between SU01 and Microsoft.
+
+People are matched by the e-mail address in SU01. The comparisons need extra SAP read authorizations. [Details](../../TECHNICAL.md#entra-id-users-and-groups)
+
+The role and SU01 options are new in 0.8.0 and have not yet been tried in SAP.
